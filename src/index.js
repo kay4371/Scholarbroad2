@@ -1,0 +1,206 @@
+require('dotenv').config();
+const express = require('express');
+const scraperService = require('./services/scraperService');
+const mongoService = require('./services/mongoService');
+const groqService = require('./services/groqService');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+
+// ============================================
+// HEALTH CHECK
+// ============================================
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    service: 'Scholarship Scraper API',
+    timestamp: new Date().toISOString(),
+    mongodb: !!process.env.MONGODB_URI
+  });
+});
+
+// ============================================
+// SCRAPE ENDPOINT (Called by Cloudflare Worker)
+// ============================================
+app.post('/api/scrape', async (req, res) => {
+  try {
+    console.log('\n🚀 ========================================');
+    console.log('   SCRAPE REQUEST RECEIVED');
+    console.log('========================================');
+    console.log(`⏰ Time: ${new Date().toISOString()}`);
+    console.log(`📍 From: ${req.headers['user-agent'] || 'Unknown'}\n`);
+    
+    // Run scraper
+    console.log('🔍 Starting scholarship scraper...');
+    const scholarships = await scraperService.scrapeAll();
+    console.log(`✅ Scraped ${scholarships.length} scholarships`);
+    
+    // Save to MongoDB
+    console.log('\n💾 Saving to MongoDB...');
+    await mongoService.saveScholarships(scholarships);
+    console.log('✅ Saved to database');
+    
+    // Get stats
+    const stats = await mongoService.getStats();
+    
+    console.log('\n📊 Database Stats:');
+    console.log(`   Total scholarships: ${stats?.total || 0}`);
+    console.log(`   Countries: ${stats?.countries || 0}`);
+    console.log(`   Fully funded: ${stats?.fullyFunded || 0}`);
+    
+    console.log('\n========================================');
+    console.log('   SCRAPE COMPLETED SUCCESSFULLY');
+    console.log('========================================\n');
+    
+    // Return top 10 for immediate use
+    res.json({
+      success: true,
+      count: scholarships.length,
+      timestamp: new Date().toISOString(),
+      stats: stats,
+      scholarships: scholarships.slice(0, 10)
+    });
+    
+  } catch (error) {
+    console.error('\n❌ ========================================');
+    console.error('   SCRAPE FAILED');
+    console.error('========================================');
+    console.error(`Error: ${error.message}`);
+    console.error('========================================\n');
+    
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// ============================================
+// GET SCHOLARSHIPS (Called by Cloudflare Worker)
+// ============================================
+app.get('/api/scholarships', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 30;
+    console.log(`📦 Fetching ${limit} latest scholarships from MongoDB...`);
+    
+    const scholarships = await mongoService.getLatestScholarships(limit);
+    
+    res.json({
+      success: true,
+      count: scholarships.length,
+      scholarships,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Fetch error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// GET STATS
+// ============================================
+app.get('/api/stats', async (req, res) => {
+  try {
+    const stats = await mongoService.getStats();
+    res.json({
+      success: true,
+      stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// TEST ENDPOINT
+// ============================================
+app.get('/api/test', async (req, res) => {
+  try {
+    const scraperHealth = scraperService.getHealthStatus();
+    const groqHealth = groqService.getHealthStatus();
+    
+    // Test MongoDB connection
+    let mongoConnected = false;
+    try {
+      await mongoService.connect();
+      mongoConnected = true;
+    } catch (err) {
+      mongoConnected = false;
+    }
+    
+    res.json({
+      status: 'ok',
+      services: {
+        scraper: scraperHealth,
+        groq: groqHealth,
+        mongodb: {
+          configured: !!process.env.MONGODB_URI,
+          connected: mongoConnected
+        }
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: error.message 
+    });
+  }
+});
+
+// ============================================
+// ERROR HANDLERS
+// ============================================
+app.use((req, res) => {
+  res.status(404).json({ 
+    error: 'Not found',
+    path: req.path 
+  });
+});
+
+app.use((err, req, res, next) => {
+  console.error('❌ Unhandled error:', err.message);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: err.message
+  });
+});
+
+// ============================================
+// START SERVER
+// ============================================
+app.listen(PORT, () => {
+  console.log('\n🚀 ========================================');
+  console.log('   SCHOLARSHIP SCRAPER API');
+  console.log('========================================');
+  console.log(`📍 Port: ${PORT}`);
+  console.log(`🌍 URL: http://localhost:${PORT}`);
+  console.log(`⏰ Started: ${new Date().toISOString()}`);
+  console.log('\n📋 Endpoints:');
+  console.log(`   GET  /health              - Health check`);
+  console.log(`   POST /api/scrape          - Trigger scraping`);
+  console.log(`   GET  /api/scholarships    - Get scholarships`);
+  console.log(`   GET  /api/stats           - Get statistics`);
+  console.log(`   GET  /api/test            - Test all services`);
+  console.log('========================================\n');
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('🛑 SIGTERM received, closing...');
+  await mongoService.close();
+  process.exit(0);
+});
+
+module.exports = app;
