@@ -10,6 +10,25 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // ============================================
+// ROOT ROUTE
+// ============================================
+app.get('/', (req, res) => {
+  res.json({
+    message: 'ScholaBroad Scholarship API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      scrape: 'POST /api/scrape',
+      scholarships: 'GET /api/scholarships',
+      scholarshipDetail: 'GET /api/scholarship/:id',
+      stats: 'GET /api/stats',
+      test: 'GET /api/test'
+    },
+    documentation: 'https://github.com/kay4371/Scholarbroad2'
+  });
+});
+
+// ============================================
 // HEALTH CHECK
 // ============================================
 app.get('/health', (req, res) => {
@@ -22,7 +41,38 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================
-// SCRAPE ENDPOINT (Called by Cloudflare Worker)
+// GET SINGLE SCHOLARSHIP BY ID
+// ============================================
+app.get('/api/scholarship/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`📖 Fetching scholarship with ID: ${id}`);
+    
+    const scholarship = await mongoService.getScholarshipById(id);
+    
+    if (!scholarship) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Scholarship not found' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      scholarship
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching scholarship:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch scholarship' 
+    });
+  }
+});
+
+// ============================================
+// SCRAPE ENDPOINT
 // ============================================
 app.post('/api/scrape', async (req, res) => {
   try {
@@ -32,17 +82,14 @@ app.post('/api/scrape', async (req, res) => {
     console.log(`⏰ Time: ${new Date().toISOString()}`);
     console.log(`📍 From: ${req.headers['user-agent'] || 'Unknown'}\n`);
     
-    // Run scraper
     console.log('🔍 Starting scholarship scraper...');
     const scholarships = await scraperService.scrapeAll();
     console.log(`✅ Scraped ${scholarships.length} scholarships`);
     
-    // Save to MongoDB
     console.log('\n💾 Saving to MongoDB...');
     await mongoService.saveScholarships(scholarships);
     console.log('✅ Saved to database');
     
-    // Get stats
     const stats = await mongoService.getStats();
     
     console.log('\n📊 Database Stats:');
@@ -54,7 +101,6 @@ app.post('/api/scrape', async (req, res) => {
     console.log('   SCRAPE COMPLETED SUCCESSFULLY');
     console.log('========================================\n');
     
-    // Return top 10 for immediate use
     res.json({
       success: true,
       count: scholarships.length,
@@ -79,7 +125,7 @@ app.post('/api/scrape', async (req, res) => {
 });
 
 // ============================================
-// GET SCHOLARSHIPS (Called by Cloudflare Worker)
+// GET SCHOLARSHIPS
 // ============================================
 app.get('/api/scholarships', async (req, res) => {
   try {
@@ -131,7 +177,6 @@ app.get('/api/test', async (req, res) => {
     const scraperHealth = scraperService.getHealthStatus();
     const groqHealth = groqService.getHealthStatus();
     
-    // Test MongoDB connection
     let mongoConnected = false;
     try {
       await mongoService.connect();
@@ -188,9 +233,11 @@ app.listen(PORT, () => {
   console.log(`🌍 URL: http://localhost:${PORT}`);
   console.log(`⏰ Started: ${new Date().toISOString()}`);
   console.log('\n📋 Endpoints:');
+  console.log(`   GET  /                    - API info`);
   console.log(`   GET  /health              - Health check`);
   console.log(`   POST /api/scrape          - Trigger scraping`);
   console.log(`   GET  /api/scholarships    - Get scholarships`);
+  console.log(`   GET  /api/scholarship/:id - Get single scholarship`);
   console.log(`   GET  /api/stats           - Get statistics`);
   console.log(`   GET  /api/test            - Test all services`);
   console.log('========================================\n');
