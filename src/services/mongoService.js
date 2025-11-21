@@ -5,8 +5,6 @@ class MongoService {
     this.client = null;
     this.db = null;
     
-    // Using your existing MongoDB cluster credentials
-    // Just pointing to a different database: scholarships_db
     this.uri = process.env.MONGODB_URI || 
       'mongodb+srv://OlukayodeUser:Kayode4371@cluster0.zds6pi9.mongodb.net/scholarships_db?retryWrites=true&w=majority';
   }
@@ -25,8 +23,6 @@ class MongoService {
       });
 
       await this.client.connect();
-      
-      // Connect to scholarships_db (separate from olukayode_sage)
       this.db = this.client.db('scholarships_db');
       
       console.log('✅ MongoDB connected to scholarships_db');
@@ -34,6 +30,46 @@ class MongoService {
       
     } catch (error) {
       console.error('❌ MongoDB connection failed:', error.message);
+      throw error;
+    }
+  }
+
+  // Helper method to get database
+  async getDb() {
+    if (!this.db) {
+      await this.connect();
+    }
+    return this.db;
+  }
+
+  // Get scholarship by ID
+  async getScholarshipById(id) {
+    try {
+      const db = await this.getDb();
+      const { ObjectId } = require('mongodb');
+      
+      let scholarship = null;
+      
+      // Try to find by MongoDB _id first (if valid ObjectId)
+      if (ObjectId.isValid(id)) {
+        scholarship = await db.collection('scholarships').findOne({ 
+          _id: new ObjectId(id) 
+        });
+      }
+      
+      // If not found, try finding by custom id field or title
+      if (!scholarship) {
+        scholarship = await db.collection('scholarships').findOne({ 
+          $or: [
+            { id: id },
+            { title: { $regex: new RegExp(id, 'i') } }
+          ]
+        });
+      }
+      
+      return scholarship;
+    } catch (error) {
+      console.error('Error getting scholarship by ID:', error);
       throw error;
     }
   }
@@ -48,15 +84,13 @@ class MongoService {
         return { insertedCount: 0 };
       }
 
-      // Add metadata
       const documentsToInsert = scholarships.map(s => ({
         ...s,
         scrapedAt: new Date(),
         isActive: true,
-        _id: undefined // Let MongoDB generate new IDs
+        _id: undefined
       }));
 
-      // Delete old scholarships (older than 7 days)
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const deleteResult = await collection.deleteMany({
         scrapedAt: { $lt: sevenDaysAgo }
@@ -66,9 +100,8 @@ class MongoService {
         console.log(`🗑️ Deleted ${deleteResult.deletedCount} old scholarships`);
       }
 
-      // Insert new scholarships
       const result = await collection.insertMany(documentsToInsert, { 
-        ordered: false // Continue even if some fail
+        ordered: false
       });
       
       console.log(`✅ Saved ${result.insertedCount} scholarships to MongoDB`);
