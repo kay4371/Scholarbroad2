@@ -213,7 +213,19 @@ app.use((req, res) => {
     path: req.path 
   });
 });
-
+// Add this to your server.js
+app.get('/api/debug/ids', async (req, res) => {
+  try {
+    const ids = await mongoService.listAllIds(20);
+    res.json({
+      success: true,
+      count: ids.length,
+      ids
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled error:', err.message);
   res.status(500).json({ 
