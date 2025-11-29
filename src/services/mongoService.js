@@ -9,6 +9,18 @@ class MongoService {
       'mongodb+srv://OlukayodeUser:Kayode4371@cluster0.zds6pi9.mongodb.net/scholarships_db?retryWrites=true&w=majority';
   }
 
+  // Generate the SAME short ID as Cloudflare Worker
+  generateShortId(url) {
+    if (!url) return 'unknown';
+    let hash = 0;
+    for (let i = 0; i < url.length; i++) {
+      const char = url.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(36).substring(0, 8);
+  }
+
   async connect() {
     if (this.client) return this.db;
     
@@ -25,6 +37,9 @@ class MongoService {
       await this.client.connect();
       this.db = this.client.db('scholarships_db');
       
+      // Create index on custom 'id' field for fast lookups
+      await this.db.collection('scholarships').createIndex({ id: 1 }, { unique: true, sparse: true });
+      
       console.log('✅ MongoDB connected to scholarships_db');
       return this.db;
       
@@ -34,7 +49,6 @@ class MongoService {
     }
   }
 
-  // Helper method to get database
   async getDb() {
     if (!this.db) {
       await this.connect();
@@ -42,38 +56,44 @@ class MongoService {
     return this.db;
   }
 
-  // Get scholarship by ID
+  // FIXED: Get scholarship by ID
   async getScholarshipById(id) {
     try {
       const db = await this.getDb();
+      
+      console.log(`🔍 Looking for scholarship with ID: ${id}`);
+      
+      // Find by our custom 'id' field (the hash-based ID)
+      let scholarship = await db.collection('scholarships').findOne({ id: id });
+      
+      if (scholarship) {
+        console.log(`✅ Found: ${scholarship.title}`);
+        return scholarship;
+      }
+      
+      // Fallback: Try MongoDB's _id if the custom id doesn't exist
       const { ObjectId } = require('mongodb');
-      
-      let scholarship = null;
-      
-      // Try to find by MongoDB _id first (if valid ObjectId)
       if (ObjectId.isValid(id)) {
         scholarship = await db.collection('scholarships').findOne({ 
           _id: new ObjectId(id) 
         });
+        
+        if (scholarship) {
+          console.log(`✅ Found by MongoDB _id: ${scholarship.title}`);
+          return scholarship;
+        }
       }
       
-      // If not found, try finding by custom id field or title
-      if (!scholarship) {
-        scholarship = await db.collection('scholarships').findOne({ 
-          $or: [
-            { id: id },
-            { title: { $regex: new RegExp(id, 'i') } }
-          ]
-        });
-      }
+      console.log(`❌ Scholarship not found: ${id}`);
+      return null;
       
-      return scholarship;
     } catch (error) {
-      console.error('Error getting scholarship by ID:', error);
+      console.error('❌ Error getting scholarship by ID:', error);
       throw error;
     }
   }
 
+  // FIXED: Save scholarships with generated IDs
   async saveScholarships(scholarships) {
     try {
       const db = await this.connect();
@@ -81,16 +101,78 @@ class MongoService {
       
       if (!scholarships || scholarships.length === 0) {
         console.log('⚠️ No scholarships to save');
-        return { insertedCount: 0 };
+        return { insertedCount: 0, modifiedCount: 0 };
       }
 
-      const documentsToInsert = scholarships.map(s => ({
-        ...s,
-        scrapedAt: new Date(),
-        isActive: true,
-        _id: undefined
-      }));
+      console.log(`💾 Processing ${scholarships.length} scholarships...`);
+      
+      let savedCount = 0;
+      let updatedCount = 0;
+      let errorCount = 0;
 
+      for (const scholarship of scholarships) {
+        try {
+          if (!scholarship.url) {
+            console.log('⚠️ Skipping scholarship without URL');
+            errorCount++;
+            continue;
+          }
+
+          // Generate consistent ID from URL (matches Cloudflare Worker!)
+          const id = this.generateShortId(scholarship.url);
+          
+          // Prepare document with custom ID
+          const scholarshipDoc = {
+            id: id, // THIS IS THE KEY!
+            title: scholarship.title,
+            url: scholarship.url,
+            university: scholarship.university,
+            country: scholarship.country,
+            level: scholarship.level,
+            funding: scholarship.funding || scholarship.fundingType,
+            fundingType: scholarship.fundingType || scholarship.funding,
+            amount: scholarship.amount,
+            deadline: scholarship.deadline || scholarship.applicationDeadline,
+            applicationDeadline: scholarship.applicationDeadline || scholarship.deadline,
+            program: scholarship.program,
+            description: scholarship.description || scholarship.snippet,
+            snippet: scholarship.snippet,
+            requirements: scholarship.requirements,
+            source: scholarship.source,
+            relevanceScore: scholarship.relevanceScore,
+            trending: scholarship.trending,
+            urgency: scholarship.urgency,
+            searchQuery: scholarship.searchQuery,
+            scrapedAt: new Date(),
+            updatedAt: new Date(),
+            isActive: true
+          };
+
+          // Upsert (insert or update based on custom 'id' field)
+          const result = await collection.updateOne(
+            { id: id },
+            { 
+              $set: scholarshipDoc,
+              $setOnInsert: { createdAt: new Date() }
+            },
+            { upsert: true }
+          );
+
+          if (result.upsertedCount > 0) {
+            savedCount++;
+            console.log(`  ✅ Saved: ${scholarship.title.substring(0, 50)}... (ID: ${id})`);
+          } else if (result.modifiedCount > 0) {
+            updatedCount++;
+            console.log(`  ♻️ Updated: ${scholarship.title.substring(0, 50)}... (ID: ${id})`);
+          }
+
+        } catch (error) {
+          errorCount++;
+          console.error(`  ❌ Error saving scholarship: ${error.message}`);
+        }
+      }
+
+      // Clean up old scholarships (older than 7 days)
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const deleteResult = await collection.deleteMany({
         scrapedAt: { $lt: sevenDaysAgo }
@@ -100,19 +182,19 @@ class MongoService {
         console.log(`🗑️ Deleted ${deleteResult.deletedCount} old scholarships`);
       }
 
-      const result = await collection.insertMany(documentsToInsert, { 
-        ordered: false
-      });
+      console.log(`\n📊 Save Summary:`);
+      console.log(`   New: ${savedCount}`);
+      console.log(`   Updated: ${updatedCount}`);
+      console.log(`   Errors: ${errorCount}`);
+      console.log(`   Total processed: ${scholarships.length}`);
       
-      console.log(`✅ Saved ${result.insertedCount} scholarships to MongoDB`);
-      
-      return result;
+      return { 
+        insertedCount: savedCount, 
+        modifiedCount: updatedCount,
+        errorCount: errorCount
+      };
       
     } catch (error) {
-      if (error.code === 11000) {
-        console.log('⚠️ Some duplicate scholarships skipped');
-        return { insertedCount: scholarships.length };
-      }
       console.error('❌ Error saving scholarships:', error.message);
       throw error;
     }
@@ -185,6 +267,29 @@ class MongoService {
     } catch (error) {
       console.error('❌ Error fetching stats:', error.message);
       return null;
+    }
+  }
+
+  // Debug helper: List all IDs in database
+  async listAllIds(limit = 20) {
+    try {
+      const db = await this.getDb();
+      
+      const scholarships = await db.collection('scholarships')
+        .find({ isActive: true }, { projection: { id: 1, title: 1, url: 1, _id: 0 } })
+        .limit(limit)
+        .toArray();
+      
+      console.log(`\n📋 First ${limit} Scholarship IDs in Database:`);
+      scholarships.forEach(s => {
+        console.log(`   ${s.id || 'NO ID!'} - ${s.title?.substring(0, 50) || 'No title'}`);
+      });
+      
+      return scholarships;
+      
+    } catch (error) {
+      console.error('❌ Error listing IDs:', error);
+      return [];
     }
   }
 
