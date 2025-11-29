@@ -15,14 +15,15 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.json({
     message: 'ScholaBroad Scholarship API',
-    version: '1.0.0',
+    version: '2.0.0',
     endpoints: {
       health: '/health',
       scrape: 'POST /api/scrape',
       scholarships: 'GET /api/scholarships',
       scholarshipDetail: 'GET /api/scholarship/:id',
       stats: 'GET /api/stats',
-      test: 'GET /api/test'
+      test: 'GET /api/test',
+      debugIds: 'GET /api/debug/ids'
     },
     documentation: 'https://github.com/kay4371/Scholarbroad2'
   });
@@ -87,7 +88,7 @@ app.post('/api/scrape', async (req, res) => {
     console.log(`✅ Scraped ${scholarships.length} scholarships`);
     
     console.log('\n💾 Saving to MongoDB...');
-    await mongoService.saveScholarships(scholarships);
+    const saveResult = await mongoService.saveScholarships(scholarships);
     console.log('✅ Saved to database');
     
     const stats = await mongoService.getStats();
@@ -104,6 +105,8 @@ app.post('/api/scrape', async (req, res) => {
     res.json({
       success: true,
       count: scholarships.length,
+      saved: saveResult.insertedCount || 0,
+      updated: saveResult.modifiedCount || 0,
       timestamp: new Date().toISOString(),
       stats: stats,
       scholarships: scholarships.slice(0, 10)
@@ -170,6 +173,31 @@ app.get('/api/stats', async (req, res) => {
 });
 
 // ============================================
+// DEBUG: LIST ALL IDS
+// ============================================
+app.get('/api/debug/ids', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    console.log(`🔍 Fetching ${limit} scholarship IDs for debugging...`);
+    
+    const ids = await mongoService.listAllIds(limit);
+    
+    res.json({
+      success: true,
+      count: ids.length,
+      ids,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error fetching IDs:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
+
+// ============================================
 // TEST ENDPOINT
 // ============================================
 app.get('/api/test', async (req, res) => {
@@ -213,19 +241,7 @@ app.use((req, res) => {
     path: req.path 
   });
 });
-// Add this to your server.js
-app.get('/api/debug/ids', async (req, res) => {
-  try {
-    const ids = await mongoService.listAllIds(20);
-    res.json({
-      success: true,
-      count: ids.length,
-      ids
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled error:', err.message);
   res.status(500).json({ 
@@ -251,6 +267,7 @@ app.listen(PORT, () => {
   console.log(`   GET  /api/scholarships    - Get scholarships`);
   console.log(`   GET  /api/scholarship/:id - Get single scholarship`);
   console.log(`   GET  /api/stats           - Get statistics`);
+  console.log(`   GET  /api/debug/ids       - List scholarship IDs (debug)`);
   console.log(`   GET  /api/test            - Test all services`);
   console.log('========================================\n');
 });
