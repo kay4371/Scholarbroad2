@@ -41,6 +41,168 @@ app.get('/health', (req, res) => {
   });
 });
 
+/**
+ * NEW: Get fresh unposted scholarships for WhatsApp
+ * This is the KEY endpoint to prevent duplicates!
+ */
+app.post('/api/get-unposted', async (req, res) => {
+  try {
+    console.log('\n🔍 ========================================');
+    console.log('   FETCHING UNPOSTED SCHOLARSHIPS');
+    console.log('========================================\n');
+
+    const limit = req.body.limit || 3;
+    const includeReminders = req.body.includeReminders !== false; // Default true
+
+    // Get fresh unposted scholarships
+    const freshScholarships = await mongoService.getFreshUnpostedScholarships(limit);
+    
+    let reminderScholarships = [];
+    if (includeReminders) {
+      // Get scholarships needing deadline reminders
+      reminderScholarships = await mongoService.getScholarshipsNeedingReminder();
+    }
+
+    // Combine: fresh scholarships + max 1 reminder
+    const scholarshipsToPost = [
+      ...freshScholarships,
+      ...(reminderScholarships.length > 0 ? [reminderScholarships[0]] : [])
+    ].slice(0, limit);
+
+    console.log(`\n📊 Results:`);
+    console.log(`   Fresh: ${freshScholarships.length}`);
+    console.log(`   Reminders: ${reminderScholarships.length}`);
+    console.log(`   To Post: ${scholarshipsToPost.length}`);
+    console.log('========================================\n');
+
+    res.json({
+      success: true,
+      scholarships: scholarshipsToPost,
+      count: scholarshipsToPost.length,
+      breakdown: {
+        fresh: freshScholarships.length,
+        reminders: reminderScholarships.length
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching unposted:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      scholarships: [],
+      count: 0
+    });
+  }
+});
+
+/**
+ * NEW: Mark scholarships as posted
+ */
+app.post('/api/mark-posted', async (req, res) => {
+  try {
+    const { scholarshipIds } = req.body;
+
+    if (!scholarshipIds || !Array.isArray(scholarshipIds)) {
+      return res.status(400).json({
+        success: false,
+        error: 'scholarshipIds array required'
+      });
+    }
+
+    console.log(`\n✅ Marking ${scholarshipIds.length} scholarships as posted...`);
+
+    const results = [];
+    for (const id of scholarshipIds) {
+      const success = await mongoService.markAsPosted(id);
+      results.push({ id, success });
+    }
+
+    const successCount = results.filter(r => r.success).length;
+
+    console.log(`   Success: ${successCount}/${scholarshipIds.length}\n`);
+
+    res.json({
+      success: true,
+      marked: successCount,
+      total: scholarshipIds.length,
+      results: results
+    });
+
+  } catch (error) {
+    console.error('❌ Error marking as posted:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * NEW: Get posting statistics
+ */
+app.get('/api/posting-stats', async (req, res) => {
+  try {
+    const stats = await mongoService.getPostingStats();
+    
+    res.json({
+      success: true,
+      stats: stats
+    });
+
+  } catch (error) {
+    console.error('❌ Error getting stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * UPDATED: Scrape endpoint now saves to MongoDB automatically
+ */
+app.post('/api/scrape', async (req, res) => {
+  try {
+    console.log('\n🎯 ========================================');
+    console.log('   STARTING SCHOLARSHIP SCRAPING');
+    console.log('========================================\n');
+
+    // Scrape scholarships
+    const scholarships = await scraperService.scrapeAll();
+
+    // Save to MongoDB (with deduplication)
+    const saveResult = await mongoService.saveScholarships(scholarships);
+
+    // Cleanup old posted records
+    await mongoService.cleanupOldPostedRecords();
+
+    console.log('\n✅ Scraping and saving completed\n');
+
+    res.json({
+      success: true,
+      count: scholarships.length,
+      scholarships: scholarships,
+      saved: {
+        new: saveResult.insertedCount,
+        updated: saveResult.modifiedCount,
+        errors: saveResult.errorCount
+      },
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Scraping error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      count: 0,
+      scholarships: []
+    });
+  }
+});
+
 // ============================================
 // GET SINGLE SCHOLARSHIP BY ID
 // ============================================
@@ -75,57 +237,57 @@ app.get('/api/scholarship/:id', async (req, res) => {
 // ============================================
 // SCRAPE ENDPOINT
 // ============================================
-app.post('/api/scrape', async (req, res) => {
-  try {
-    console.log('\n🚀 ========================================');
-    console.log('   SCRAPE REQUEST RECEIVED');
-    console.log('========================================');
-    console.log(`⏰ Time: ${new Date().toISOString()}`);
-    console.log(`📍 From: ${req.headers['user-agent'] || 'Unknown'}\n`);
+// app.post('/api/scrape', async (req, res) => {
+//   try {
+//     console.log('\n🚀 ========================================');
+//     console.log('   SCRAPE REQUEST RECEIVED');
+//     console.log('========================================');
+//     console.log(`⏰ Time: ${new Date().toISOString()}`);
+//     console.log(`📍 From: ${req.headers['user-agent'] || 'Unknown'}\n`);
     
-    console.log('🔍 Starting scholarship scraper...');
-    const scholarships = await scraperService.scrapeAll();
-    console.log(`✅ Scraped ${scholarships.length} scholarships`);
+//     console.log('🔍 Starting scholarship scraper...');
+//     const scholarships = await scraperService.scrapeAll();
+//     console.log(`✅ Scraped ${scholarships.length} scholarships`);
     
-    console.log('\n💾 Saving to MongoDB...');
-    const saveResult = await mongoService.saveScholarships(scholarships);
-    console.log('✅ Saved to database');
+//     console.log('\n💾 Saving to MongoDB...');
+//     const saveResult = await mongoService.saveScholarships(scholarships);
+//     console.log('✅ Saved to database');
     
-    const stats = await mongoService.getStats();
+//     const stats = await mongoService.getStats();
     
-    console.log('\n📊 Database Stats:');
-    console.log(`   Total scholarships: ${stats?.total || 0}`);
-    console.log(`   Countries: ${stats?.countries || 0}`);
-    console.log(`   Fully funded: ${stats?.fullyFunded || 0}`);
+//     console.log('\n📊 Database Stats:');
+//     console.log(`   Total scholarships: ${stats?.total || 0}`);
+//     console.log(`   Countries: ${stats?.countries || 0}`);
+//     console.log(`   Fully funded: ${stats?.fullyFunded || 0}`);
     
-    console.log('\n========================================');
-    console.log('   SCRAPE COMPLETED SUCCESSFULLY');
-    console.log('========================================\n');
+//     console.log('\n========================================');
+//     console.log('   SCRAPE COMPLETED SUCCESSFULLY');
+//     console.log('========================================\n');
     
-    res.json({
-      success: true,
-      count: scholarships.length,
-      saved: saveResult.insertedCount || 0,
-      updated: saveResult.modifiedCount || 0,
-      timestamp: new Date().toISOString(),
-      stats: stats,
-      scholarships: scholarships.slice(0, 10)
-    });
+//     res.json({
+//       success: true,
+//       count: scholarships.length,
+//       saved: saveResult.insertedCount || 0,
+//       updated: saveResult.modifiedCount || 0,
+//       timestamp: new Date().toISOString(),
+//       stats: stats,
+//       scholarships: scholarships.slice(0, 10)
+//     });
     
-  } catch (error) {
-    console.error('\n❌ ========================================');
-    console.error('   SCRAPE FAILED');
-    console.error('========================================');
-    console.error(`Error: ${error.message}`);
-    console.error('========================================\n');
+//   } catch (error) {
+//     console.error('\n❌ ========================================');
+//     console.error('   SCRAPE FAILED');
+//     console.error('========================================');
+//     console.error(`Error: ${error.message}`);
+//     console.error('========================================\n');
     
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
+//     res.status(500).json({
+//       success: false,
+//       error: error.message,
+//       timestamp: new Date().toISOString()
+//     });
+//   }
+// });
 
 // ============================================
 // GET SCHOLARSHIPS
