@@ -301,6 +301,219 @@ class MongoService {
       console.log('🔌 MongoDB connection closed');
     }
   }
+
+  /**
+   * Track a scholarship as "posted to WhatsApp"
+   * Prevents duplicate posts
+   */
+  async markAsPosted(scholarshipId, postedAt = new Date()) {
+    try {
+      const db = await this.getDb();
+      const collection = db.collection('posted_scholarships');
+      
+      const record = {
+        scholarshipId: scholarshipId,
+        postedAt: postedAt,
+        postedBy: 'whatsapp_bot',
+        channel: 'whatsapp_group',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+      };
+
+      await collection.updateOne(
+        { scholarshipId: scholarshipId },
+        { 
+          $set: record,
+          $inc: { timesPosted: 1 } // Count how many times posted
+        },
+        { upsert: true }
+      );
+
+      console.log(`✅ Marked as posted: ${scholarshipId}`);
+      return true;
+      
+    } catch (error) {
+      console.error('❌ Error marking as posted:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if scholarship was already posted
+   * Returns true if posted within last 30 days
+   */
+  async wasAlreadyPosted(scholarshipId) {
+    try {
+      const db = await this.getDb();
+      const collection = db.collection('posted_scholarships');
+      
+      const record = await collection.findOne({ 
+        scholarshipId: scholarshipId,
+        postedAt: { 
+          $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
+        }
+      });
+
+      return !!record;
+      
+    } catch (error) {
+      console.error('❌ Error checking posted status:', error);
+      return false; // If error, assume not posted (safer)
+    }
+  }
+
+  /**
+   * Get scholarships that need reminder (deadline within 7 days, posted 21+ days ago)
+   */
+  async getScholarshipsNeedingReminder() {
+    try {
+      const db = await this.getDb();
+      const scholarshipsCollection = db.collection('scholarships');
+      const postedCollection = db.collection('posted_scholarships');
+      
+      const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const twentyOneDaysAgo = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000);
+      
+      // Find scholarships with upcoming deadlines
+      const upcomingDeadlines = await scholarshipsCollection
+        .find({ 
+          isActive: true,
+          deadline: { $exists: true, $ne: 'Check website' }
+        })
+        .toArray();
+
+      const needsReminder = [];
+
+      for (const scholarship of upcomingDeadlines) {
+        try {
+          const deadlineDate = new Date(scholarship.deadline);
+          
+          // Check if deadline is within 7 days
+          if (deadlineDate <= sevenDaysFromNow && deadlineDate > new Date()) {
+            
+            // Check if it was posted more than 21 days ago
+            const postedRecord = await postedCollection.findOne({
+              scholarshipId: scholarship.id,
+              postedAt: { $lt: twentyOneDaysAgo }
+            });
+
+            if (postedRecord) {
+              needsReminder.push({
+                ...scholarship,
+                lastPosted: postedRecord.postedAt,
+                daysUntilDeadline: Math.ceil((deadlineDate - new Date()) / (1000 * 60 * 60 * 24))
+              });
+            }
+          }
+        } catch (error) {
+          // Skip scholarships with invalid deadlines
+          continue;
+        }
+      }
+
+      console.log(`🔔 Found ${needsReminder.length} scholarships needing reminders`);
+      return needsReminder;
+      
+    } catch (error) {
+      console.error('❌ Error getting reminder scholarships:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get fresh, unposted scholarships
+   */
+  async getFreshUnpostedScholarships(limit = 3) {
+    try {
+      const db = await this.getDb();
+      const scholarshipsCollection = db.collection('scholarships');
+      const postedCollection = db.collection('posted_scholarships');
+      
+      // Get all active scholarships
+      const allScholarships = await scholarshipsCollection
+        .find({ isActive: true })
+        .sort({ 
+          urgency: -1,           // HIGH urgency first
+          relevanceScore: -1,    // Then by relevance
+          scrapedAt: -1          // Then by freshness
+        })
+        .limit(limit * 3)        // Get 3x more to filter
+        .toArray();
+
+      // Filter out already posted
+      const unposted = [];
+      
+      for (const scholarship of allScholarships) {
+        if (unposted.length >= limit) break;
+        
+        const wasPosted = await this.wasAlreadyPosted(scholarship.id);
+        
+        if (!wasPosted) {
+          unposted.push(scholarship);
+        }
+      }
+
+      console.log(`📋 Found ${unposted.length} fresh unposted scholarships (from ${allScholarships.length} total)`);
+      return unposted;
+      
+    } catch (error) {
+      console.error('❌ Error getting fresh scholarships:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Cleanup old posted records (older than 90 days)
+   */
+  async cleanupOldPostedRecords() {
+    try {
+      const db = await this.getDb();
+      const collection = db.collection('posted_scholarships');
+      
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      
+      const result = await collection.deleteMany({
+        postedAt: { $lt: ninetyDaysAgo }
+      });
+
+      if (result.deletedCount > 0) {
+        console.log(`🗑️ Cleaned up ${result.deletedCount} old posted records`);
+      }
+
+      return result.deletedCount;
+      
+    } catch (error) {
+      console.error('❌ Error cleaning up posted records:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * Get posting statistics
+   */
+  async getPostingStats() {
+    try {
+      const db = await this.getDb();
+      const collection = db.collection('posted_scholarships');
+      
+      const totalPosted = await collection.countDocuments();
+      const last7Days = await collection.countDocuments({
+        postedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+      });
+      const last30Days = await collection.countDocuments({
+        postedAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+      });
+
+      return {
+        totalEverPosted: totalPosted,
+        postedLast7Days: last7Days,
+        postedLast30Days: last30Days
+      };
+      
+    } catch (error) {
+      console.error('❌ Error getting posting stats:', error);
+      return null;
+    }
+  }
 }
 
 module.exports = new MongoService();
