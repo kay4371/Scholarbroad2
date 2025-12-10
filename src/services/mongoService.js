@@ -1,4 +1,4 @@
-const { MongoClient } = require('mongodb');
+const { MongoClient, ObjectId } = require('mongodb');
 
 class MongoService {
   constructor() {
@@ -111,19 +111,26 @@ class MongoService {
     await this.connect();
 
     try {
+      console.log(`🔍 Looking up scholarship with ID: ${id}`);
+      
       // Try to find by short ID first (this is what the URL uses)
       const scholarship = await this.collection.findOne({ id: id });
       
       if (scholarship) {
+        console.log(`✅ Found scholarship by short ID: ${scholarship.title}`);
         return scholarship;
       }
 
       // Fallback: try MongoDB _id
-      const { ObjectId } = require('mongodb');
       if (ObjectId.isValid(id)) {
-        return await this.collection.findOne({ _id: new ObjectId(id) });
+        const byObjectId = await this.collection.findOne({ _id: new ObjectId(id) });
+        if (byObjectId) {
+          console.log(`✅ Found scholarship by MongoDB _id: ${byObjectId.title}`);
+          return byObjectId;
+        }
       }
 
+      console.log(`❌ No scholarship found with ID: ${id}`);
       return null;
     } catch (error) {
       console.error('❌ Error fetching scholarship:', error);
@@ -192,6 +199,8 @@ class MongoService {
     await this.connect();
 
     try {
+      console.log(`📝 Marking scholarship as posted: ${scholarshipId}`);
+      
       // Try to find by short ID first
       let result = await this.collection.updateOne(
         { id: scholarshipId },
@@ -206,7 +215,6 @@ class MongoService {
 
       if (result.matchedCount === 0) {
         // Fallback: try MongoDB _id
-        const { ObjectId } = require('mongodb');
         if (ObjectId.isValid(scholarshipId)) {
           result = await this.collection.updateOne(
             { _id: new ObjectId(scholarshipId) },
@@ -221,7 +229,9 @@ class MongoService {
         }
       }
 
-      return result.modifiedCount > 0;
+      const success = result.modifiedCount > 0;
+      console.log(success ? `✅ Marked as posted` : `⚠️ No changes made`);
+      return success;
     } catch (error) {
       console.error(`Error marking as posted: ${error.message}`);
       return false;
