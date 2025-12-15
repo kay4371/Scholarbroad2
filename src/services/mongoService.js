@@ -8,12 +8,94 @@ class MongoService {
     this.isConnected = false;
   }
 
-  // Generate consistent short ID from URL (SAME as Cloudflare Worker)
+  // ==========================================
+  // URL NORMALIZATION (IDENTICAL TO SCRAPER)
+  // ==========================================
+  normalizeUrl(url) {
+    if (!url || typeof url !== 'string') {
+      return null;
+    }
+
+    try {
+      url = url.trim();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+
+      const urlObj = new URL(url);
+      
+      let hostname = urlObj.hostname.toLowerCase();
+      hostname = hostname.replace(/^www\./, '');
+      
+      let pathname = urlObj.pathname.toLowerCase();
+      if (pathname.length > 1 && pathname.endsWith('/')) {
+        pathname = pathname.slice(0, -1);
+      }
+      
+      const trackingParams = [
+        'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+        'ref', 'source', 'fbclid', 'gclid', 'msclkid', '_ga', 'mc_cid', 'mc_eid'
+      ];
+      
+      trackingParams.forEach(param => {
+        urlObj.searchParams.delete(param);
+      });
+      
+      const sortedParams = new URLSearchParams(
+        [...urlObj.searchParams.entries()].sort()
+      );
+      
+      const normalizedUrl = `https://${hostname}${pathname}${
+        sortedParams.toString() ? '?' + sortedParams.toString() : ''
+      }`;
+      
+      return normalizedUrl;
+      
+    } catch (error) {
+      console.error(`URL normalization failed: ${error.message}`);
+      return url;
+    }
+  }
+
+  // ==========================================
+  // TITLE FINGERPRINT (IDENTICAL TO SCRAPER)
+  // ==========================================
+  generateTitleFingerprint(title) {
+    if (!title || typeof title !== 'string') {
+      return null;
+    }
+
+    let fingerprint = title.toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    const noiseWords = [
+      'scholarship', 'scholarships', 'program', 'programme', 
+      'opportunity', 'opportunities', 'fully', 'funded',
+      'international', 'students', 'applications', 'open',
+      'the', 'for', 'in', 'at', 'and', 'or'
+    ];
+    
+    const words = fingerprint.split(' ').filter(word => 
+      word.length > 2 && !noiseWords.includes(word)
+    );
+    
+    const wordsNoYears = words.filter(word => !/^\d{4}$/.test(word));
+    const sortedWords = wordsNoYears.sort();
+    fingerprint = sortedWords.join(' ').substring(0, 100);
+    
+    return fingerprint || null;
+  }
+
+  // Generate consistent short ID from normalized URL
   generateShortId(url) {
-    if (!url) return 'unknown';
+    const normalized = this.normalizeUrl(url);
+    if (!normalized) return 'unknown';
+    
     let hash = 0;
-    for (let i = 0; i < url.length; i++) {
-      const char = url.charCodeAt(i);
+    for (let i = 0; i < normalized.length; i++) {
+      const char = normalized.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash;
     }
@@ -34,14 +116,28 @@ class MongoService {
       this.db = this.client.db('scholarbroad');
       this.collection = this.db.collection('scholarships');
       
-      // Create indexes
-      await this.collection.createIndex({ url: 1 }, { unique: true });
-      await this.collection.createIndex({ id: 1 }, { unique: true }); // Index on short ID
-      await this.collection.createIndex({ posted: 1 });
-      await this.collection.createIndex({ scrapedAt: -1 });
+      // ==========================================
+      // ENHANCED INDEXES FOR DEDUPLICATION
+      // ==========================================
+      await this.collection.createIndex(
+        { normalizedUrl: 1 }, 
+        { unique: true, name: 'unique_normalized_url' }
+      );
+      await this.collection.createIndex(
+        { id: 1 }, 
+        { unique: true, name: 'unique_short_id' }
+      );
+      await this.collection.createIndex(
+        { titleFingerprint: 1 }, 
+        { sparse: true, name: 'title_fingerprint_index' }
+      );
+      await this.collection.createIndex(
+        { posted: 1, scrapedAt: -1 }, 
+        { name: 'posting_query_index' }
+      );
       
       this.isConnected = true;
-      console.log('✅ MongoDB connected successfully');
+      console.log('✅ MongoDB connected with enhanced deduplication indexes');
     } catch (error) {
       console.error('❌ MongoDB connection error:', error.message);
       throw error;
@@ -53,57 +149,110 @@ class MongoService {
 
     let insertedCount = 0;
     let modifiedCount = 0;
+    let skippedDuplicates = 0;
     let errorCount = 0;
+
+    console.log(`💾 Saving ${scholarships.length} scholarships with enhanced deduplication...\n`);
 
     for (const scholarship of scholarships) {
       try {
-        if (!scholarship.url) {
+        if (!scholarship.url || !scholarship.title) {
           errorCount++;
           continue;
         }
 
-        // Generate consistent short ID
-        const shortId = this.generateShortId(scholarship.url);
-        
-        // Prepare scholarship data with short ID
-        const scholarshipData = {
-          ...scholarship,
-          id: shortId, // Store short ID for URL generation
-          url: scholarship.url,
-          posted: false,
-          lastPostedAt: null,
-          postCount: 0,
-          scrapedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
+        // Normalize URL
+        const normalizedUrl = this.normalizeUrl(scholarship.url);
+        if (!normalizedUrl) {
+          console.log(`   ⚠️  Invalid URL, skipping: ${scholarship.title.substring(0, 50)}`);
+          errorCount++;
+          continue;
+        }
 
-        const result = await this.collection.updateOne(
-          { url: scholarship.url },
-          { 
-            $set: scholarshipData,
-            $setOnInsert: { createdAt: new Date().toISOString() }
-          },
-          { upsert: true }
-        );
+        // Generate identifiers
+        const shortId = this.generateShortId(normalizedUrl);
+        const titleFingerprint = this.generateTitleFingerprint(scholarship.title);
 
-        if (result.upsertedCount > 0) {
+        // Check for existing scholarship by normalized URL
+        const existing = await this.collection.findOne({ normalizedUrl });
+
+        if (existing) {
+          // Update existing record
+          const result = await this.collection.updateOne(
+            { normalizedUrl },
+            { 
+              $set: {
+                ...scholarship,
+                normalizedUrl,
+                id: shortId,
+                titleFingerprint,
+                updatedAt: new Date().toISOString()
+              }
+            }
+          );
+
+          if (result.modifiedCount > 0) {
+            modifiedCount++;
+            console.log(`   🔄 Updated: ${scholarship.title.substring(0, 60)}...`);
+          } else {
+            skippedDuplicates++;
+          }
+        } else {
+          // Check for semantic duplicate by title fingerprint
+          if (titleFingerprint) {
+            const semanticDuplicate = await this.collection.findOne({ titleFingerprint });
+            
+            if (semanticDuplicate) {
+              skippedDuplicates++;
+              console.log(`   ⚠️  Semantic duplicate detected, skipping:`);
+              console.log(`       Existing: ${semanticDuplicate.title.substring(0, 50)}...`);
+              console.log(`       New: ${scholarship.title.substring(0, 50)}...`);
+              continue;
+            }
+          }
+
+          // Insert new scholarship
+          const scholarshipData = {
+            ...scholarship,
+            normalizedUrl,
+            id: shortId,
+            titleFingerprint,
+            posted: false,
+            lastPostedAt: null,
+            postCount: 0,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            scrapedAt: new Date().toISOString()
+          };
+
+          await this.collection.insertOne(scholarshipData);
           insertedCount++;
-        } else if (result.modifiedCount > 0) {
-          modifiedCount++;
+          console.log(`   ✅ New: ${scholarship.title.substring(0, 60)}...`);
         }
 
       } catch (error) {
-        console.error(`Error saving scholarship: ${error.message}`);
-        errorCount++;
+        if (error.code === 11000) {
+          // Duplicate key error - this is now expected and handled
+          skippedDuplicates++;
+        } else {
+          console.error(`   ❌ Error saving scholarship: ${error.message}`);
+          errorCount++;
+        }
       }
     }
 
-    console.log(`💾 Saved: ${insertedCount} new, ${modifiedCount} updated, ${errorCount} errors`);
+    console.log(`\n📊 Save Results:`);
+    console.log(`   ✅ Inserted: ${insertedCount} new scholarships`);
+    console.log(`   🔄 Updated: ${modifiedCount} existing scholarships`);
+    console.log(`   ⏭️  Skipped: ${skippedDuplicates} duplicates`);
+    console.log(`   ❌ Errors: ${errorCount}\n`);
 
     return {
       insertedCount,
       modifiedCount,
-      errorCount
+      skippedDuplicates,
+      errorCount,
+      totalProcessed: scholarships.length
     };
   }
 
@@ -113,11 +262,11 @@ class MongoService {
     try {
       console.log(`🔍 Looking up scholarship with ID: ${id}`);
       
-      // Try to find by short ID first (this is what the URL uses)
+      // Try to find by short ID first
       const scholarship = await this.collection.findOne({ id: id });
       
       if (scholarship) {
-        console.log(`✅ Found scholarship by short ID: ${scholarship.title}`);
+        console.log(`✅ Found scholarship: ${scholarship.title}`);
         return scholarship;
       }
 
@@ -148,10 +297,11 @@ class MongoService {
           { posted: { $exists: false } }
         ]
       })
-      .sort({ scrapedAt: -1 })
+      .sort({ scrapedAt: -1, relevanceScore: -1 })
       .limit(limit)
       .toArray();
 
+    console.log(`📋 Found ${scholarships.length} unposted scholarships`);
     return scholarships;
   }
 
@@ -159,7 +309,6 @@ class MongoService {
     await this.connect();
 
     const now = new Date();
-    const threeDaysFromNow = new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000));
 
     const scholarships = await this.collection
       .find({
@@ -178,7 +327,6 @@ class MongoService {
         if (isNaN(deadline.getTime())) return false;
 
         const daysUntil = Math.floor((deadline - now) / (1000 * 60 * 60 * 24));
-        
         return daysUntil > 0 && daysUntil <= 7;
       } catch {
         return false;
@@ -199,7 +347,7 @@ class MongoService {
     await this.connect();
 
     try {
-      console.log(`📝 Marking scholarship as posted: ${scholarshipId}`);
+      console.log(`📌 Marking scholarship as posted: ${scholarshipId}`);
       
       // Try to find by short ID first
       let result = await this.collection.updateOne(
@@ -250,10 +398,19 @@ class MongoService {
       ]
     });
 
+    // Duplicate detection stats
+    const duplicatesByFingerprint = await this.collection.aggregate([
+      { $match: { titleFingerprint: { $exists: true, $ne: null } } },
+      { $group: { _id: '$titleFingerprint', count: { $sum: 1 } } },
+      { $match: { count: { $gt: 1 } } },
+      { $count: 'total' }
+    ]).toArray();
+
     return {
       total,
       posted,
       unposted,
+      potentialDuplicates: duplicatesByFingerprint[0]?.total || 0,
       timestamp: new Date().toISOString()
     };
   }
@@ -278,6 +435,56 @@ class MongoService {
       console.error('Error during cleanup:', error.message);
       return 0;
     }
+  }
+
+  async findAndMergeDuplicates() {
+    await this.connect();
+
+    console.log('🔍 Scanning for duplicates...\n');
+
+    // Find duplicates by title fingerprint
+    const duplicates = await this.collection.aggregate([
+      { $match: { titleFingerprint: { $exists: true, $ne: null } } },
+      { $group: { 
+          _id: '$titleFingerprint', 
+          count: { $sum: 1 },
+          docs: { $push: '$$ROOT' }
+        }
+      },
+      { $match: { count: { $gt: 1 } } }
+    ]).toArray();
+
+    let mergedCount = 0;
+
+    for (const group of duplicates) {
+      console.log(`\n📦 Found ${group.count} duplicates:`);
+      group.docs.forEach(doc => {
+        console.log(`   - ${doc.title.substring(0, 60)}... (${doc.id})`);
+      });
+
+      // Keep the one with highest relevance score or most recent
+      const sorted = group.docs.sort((a, b) => {
+        if (a.posted && !b.posted) return -1;
+        if (!a.posted && b.posted) return 1;
+        return (b.relevanceScore || 0) - (a.relevanceScore || 0);
+      });
+
+      const keepDoc = sorted[0];
+      const removeIds = sorted.slice(1).map(d => d._id);
+
+      console.log(`   ✅ Keeping: ${keepDoc.title.substring(0, 50)}... (${keepDoc.id})`);
+      console.log(`   🗑️  Removing ${removeIds.length} duplicates`);
+
+      // Delete duplicates
+      await this.collection.deleteMany({
+        _id: { $in: removeIds }
+      });
+
+      mergedCount += removeIds.length;
+    }
+
+    console.log(`\n📊 Merge complete: Removed ${mergedCount} duplicate records\n`);
+    return mergedCount;
   }
 
   async getLatestScholarships(limit = 30) {
@@ -316,7 +523,7 @@ class MongoService {
 
     const scholarships = await this.collection
       .find({})
-      .project({ _id: 1, id: 1, title: 1, url: 1 })
+      .project({ _id: 1, id: 1, title: 1, normalizedUrl: 1, titleFingerprint: 1 })
       .sort({ scrapedAt: -1 })
       .limit(limit)
       .toArray();
@@ -325,7 +532,8 @@ class MongoService {
       mongoId: s._id.toString(),
       shortId: s.id,
       title: s.title,
-      url: s.url
+      normalizedUrl: s.normalizedUrl,
+      fingerprint: s.titleFingerprint
     }));
   }
 
