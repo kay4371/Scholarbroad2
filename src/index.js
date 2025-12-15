@@ -234,6 +234,84 @@ app.get('/api/scholarship/:id', async (req, res) => {
   }
 });
 
+
+/**
+ * POST /api/cleanup-duplicates
+ * Scans database and merges duplicate scholarships
+ */
+app.post('/api/cleanup-duplicates', async (req, res) => {
+  try {
+    console.log('\n🧹 Starting duplicate cleanup process...\n');
+    
+    const mergedCount = await mongoService.findAndMergeDuplicates();
+    
+    const stats = await mongoService.getPostingStats();
+    
+    res.json({
+      success: true,
+      message: 'Duplicate cleanup completed',
+      results: {
+        duplicatesRemoved: mergedCount,
+        currentStats: stats
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Cleanup failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/check-duplicates
+ * Returns information about potential duplicates without deleting
+ */
+app.get('/api/check-duplicates', async (req, res) => {
+  try {
+    await mongoService.connect();
+    
+    // Find potential duplicates by title fingerprint
+    const duplicates = await mongoService.collection.aggregate([
+      { $match: { titleFingerprint: { $exists: true, $ne: null } } },
+      { 
+        $group: { 
+          _id: '$titleFingerprint', 
+          count: { $sum: 1 },
+          titles: { $push: '$title' },
+          ids: { $push: '$id' }
+        }
+      },
+      { $match: { count: { $gt: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 50 }
+    ]).toArray();
+    
+    res.json({
+      success: true,
+      duplicateGroups: duplicates.length,
+      totalDuplicates: duplicates.reduce((sum, g) => sum + g.count - 1, 0),
+      examples: duplicates.slice(0, 10).map(g => ({
+        count: g.count,
+        titles: g.titles,
+        ids: g.ids
+      })),
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Check failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ============================================
 // SCRAPE ENDPOINT
 // ============================================
