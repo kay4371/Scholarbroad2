@@ -102,47 +102,196 @@ class MongoService {
     return Math.abs(hash).toString(36).substring(0, 8);
   }
 
-  async connect() {
-    if (this.isConnected) return;
+async connect() {
+  if (this.isConnected) return;
 
+  try {
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      throw new Error('MONGODB_URI not configured');
+    }
+
+    this.client = new MongoClient(uri);
+    await this.client.connect();
+    this.db = this.client.db('scholarbroad');
+    this.collection = this.db.collection('scholarships');
+    
+    console.log('✅ MongoDB connected');
+    
+    // ==========================================
+    // DATA MIGRATION: Normalize existing URLs
+    // ==========================================
+    await this.migrateExistingData();
+    
+    // ==========================================
+    // CREATE INDEXES AFTER MIGRATION
+    // ==========================================
     try {
-      const uri = process.env.MONGODB_URI;
-      if (!uri) {
-        throw new Error('MONGODB_URI not configured');
+      // Drop existing problematic indexes first
+      try {
+        await this.collection.dropIndex('unique_normalized_url');
+        console.log('   🗑️  Dropped old unique_normalized_url index');
+      } catch (e) {
+        // Index doesn't exist, that's fine
       }
 
-      this.client = new MongoClient(uri);
-      await this.client.connect();
-      this.db = this.client.db('scholarbroad');
-      this.collection = this.db.collection('scholarships');
-      
-      // ==========================================
-      // ENHANCED INDEXES FOR DEDUPLICATION
-      // ==========================================
+      try {
+        await this.collection.dropIndex('url_1');
+        console.log('   🗑️  Dropped old url_1 index');
+      } catch (e) {
+        // Index doesn't exist, that's fine
+      }
+
+      // Create new indexes
       await this.collection.createIndex(
         { normalizedUrl: 1 }, 
-        { unique: true, name: 'unique_normalized_url' }
+        { 
+          unique: true, 
+          name: 'unique_normalized_url',
+          partialFilterExpression: { normalizedUrl: { $type: 'string' } }
+        }
       );
+      console.log('   ✅ Created unique_normalized_url index');
+
       await this.collection.createIndex(
         { id: 1 }, 
-        { unique: true, name: 'unique_short_id' }
+        { 
+          unique: true, 
+          name: 'unique_short_id',
+          partialFilterExpression: { id: { $type: 'string' } }
+        }
       );
+      console.log('   ✅ Created unique_short_id index');
+
       await this.collection.createIndex(
         { titleFingerprint: 1 }, 
-        { sparse: true, name: 'title_fingerprint_index' }
+        { 
+          sparse: true, 
+          name: 'title_fingerprint_index' 
+        }
       );
+      console.log('   ✅ Created title_fingerprint_index');
+
       await this.collection.createIndex(
         { posted: 1, scrapedAt: -1 }, 
         { name: 'posting_query_index' }
       );
-      
-      this.isConnected = true;
-      console.log('✅ MongoDB connected with enhanced deduplication indexes');
-    } catch (error) {
-      console.error('❌ MongoDB connection error:', error.message);
-      throw error;
+      console.log('   ✅ Created posting_query_index');
+
+    } catch (indexError) {
+      console.error('⚠️  Index creation warning:', indexError.message);
+      // Don't fail connection if indexes have issues
     }
+    
+    this.isConnected = true;
+    console.log('✅ MongoDB ready with enhanced deduplication\n');
+
+  } catch (error) {
+    console.error('❌ MongoDB connection error:', error.message);
+    throw error;
   }
+}
+
+
+// ==========================================
+// MIGRATE EXISTING DATA
+// ==========================================
+async migrateExistingData() {
+  console.log('\n🔄 Checking for data migration...');
+  
+  try {
+    // Count records without normalized fields
+    const needsMigration = await this.collection.countDocuments({
+      $or: [
+        { normalizedUrl: { $exists: false } },
+        { normalizedUrl: null },
+        { titleFingerprint: { $exists: false } }
+      ]
+    });
+
+    if (needsMigration === 0) {
+      console.log('   ✅ All records already migrated');
+      return;
+    }
+
+    console.log(`   📦 Found ${needsMigration} records needing migration\n`);
+
+    // Get all records needing migration
+    const records = await this.collection.find({
+      $or: [
+        { normalizedUrl: { $exists: false } },
+        { normalizedUrl: null },
+        { titleFingerprint: { $exists: false } }
+      ]
+    }).toArray();
+
+    let migratedCount = 0;
+    let errorCount = 0;
+    const urlMap = new Map(); // Track duplicates
+
+    for (const record of records) {
+      try {
+        if (!record.url) {
+          console.log(`   ⚠️  Record ${record._id} has no URL, skipping`);
+          errorCount++;
+          continue;
+        }
+
+        // Normalize URL
+        const normalizedUrl = this.normalizeUrl(record.url);
+        if (!normalizedUrl) {
+          console.log(`   ⚠️  Could not normalize URL: ${record.url}`);
+          errorCount++;
+          continue;
+        }
+
+        // Check if this normalized URL already exists
+        if (urlMap.has(normalizedUrl)) {
+          console.log(`   🗑️  Duplicate detected, deleting: ${record.title?.substring(0, 50)}...`);
+          await this.collection.deleteOne({ _id: record._id });
+          continue;
+        }
+
+        // Generate new identifiers
+        const shortId = this.generateShortId(normalizedUrl);
+        const titleFingerprint = this.generateTitleFingerprint(record.title || '');
+
+        // Update record
+        await this.collection.updateOne(
+          { _id: record._id },
+          { 
+            $set: {
+              normalizedUrl,
+              id: shortId,
+              titleFingerprint,
+              updatedAt: new Date().toISOString()
+            }
+          }
+        );
+
+        urlMap.set(normalizedUrl, record._id);
+        migratedCount++;
+
+        if (migratedCount % 10 === 0) {
+          console.log(`   📊 Migrated ${migratedCount}/${records.length} records...`);
+        }
+
+      } catch (error) {
+        console.error(`   ❌ Error migrating record ${record._id}:`, error.message);
+        errorCount++;
+      }
+    }
+
+    console.log(`\n   ✅ Migration complete:`);
+    console.log(`      Migrated: ${migratedCount}`);
+    console.log(`      Errors: ${errorCount}`);
+    console.log(`      Total processed: ${records.length}\n`);
+
+  } catch (error) {
+    console.error('❌ Migration failed:', error.message);
+    throw error;
+  }
+}
 
   async saveScholarships(scholarships) {
     await this.connect();
