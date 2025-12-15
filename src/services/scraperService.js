@@ -1735,7 +1735,6 @@
 // module.exports = new ScraperService();
 ///////////////////////////////////////////////////////////////////////////////
 
-
 const axios = require('axios');
 const cheerio = require('cheerio');
 const Parser = require('rss-parser');
@@ -2962,6 +2961,181 @@ class ScraperService {
       return url;
     }
   }
+
+
+// ==========================================
+// URL NORMALIZATION - Add after cleanGoogleUrl()
+// ==========================================
+
+/**
+ * Normalizes URLs to prevent duplicates from URL variations
+ * Handles: trailing slashes, query params, www prefix, protocols
+ */
+normalizeUrl(url) {
+  if (!url || typeof url !== 'string') {
+    return null;
+  }
+
+  try {
+    // Remove whitespace
+    url = url.trim();
+
+    // Ensure protocol
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+
+    const urlObj = new URL(url);
+    
+    // Normalize hostname: remove www, convert to lowercase
+    let hostname = urlObj.hostname.toLowerCase();
+    hostname = hostname.replace(/^www\./, '');
+    
+    // Normalize pathname: remove trailing slash, lowercase
+    let pathname = urlObj.pathname.toLowerCase();
+    if (pathname.length > 1 && pathname.endsWith('/')) {
+      pathname = pathname.slice(0, -1);
+    }
+    
+    // Remove common tracking parameters
+    const trackingParams = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+      'ref', 'source', 'fbclid', 'gclid', 'msclkid', '_ga', 'mc_cid', 'mc_eid'
+    ];
+    
+    trackingParams.forEach(param => {
+      urlObj.searchParams.delete(param);
+    });
+    
+    // Sort remaining query params for consistency
+    const sortedParams = new URLSearchParams(
+      [...urlObj.searchParams.entries()].sort()
+    );
+    
+    // Reconstruct URL
+    const normalizedUrl = `https://${hostname}${pathname}${
+      sortedParams.toString() ? '?' + sortedParams.toString() : ''
+    }`;
+    
+    return normalizedUrl;
+    
+  } catch (error) {
+    console.error(`URL normalization failed for: ${url}`, error.message);
+    return url; // Return original if normalization fails
+  }
+}
+
+/**
+ * Generate a fingerprint from scholarship title for semantic deduplication
+ * Handles: case, special chars, years, common words
+ */
+generateTitleFingerprint(title) {
+  if (!title || typeof title !== 'string') {
+    return null;
+  }
+
+  // Lowercase and remove special characters
+  let fingerprint = title.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')  // Remove special chars
+    .replace(/\s+/g, ' ')       // Normalize whitespace
+    .trim();
+  
+  // Remove common noise words
+  const noiseWords = [
+    'scholarship', 'scholarships', 'program', 'programme', 
+    'opportunity', 'opportunities', 'fully', 'funded',
+    'international', 'students', 'applications', 'open',
+    'the', 'for', 'in', 'at', 'and', 'or'
+  ];
+  
+  const words = fingerprint.split(' ').filter(word => 
+    word.length > 2 && !noiseWords.includes(word)
+  );
+  
+  // Remove years (2024, 2025, etc.)
+  const wordsNoYears = words.filter(word => !/^\d{4}$/.test(word));
+  
+  // Sort words alphabetically for consistency
+  const sortedWords = wordsNoYears.sort();
+  
+  // Create fingerprint
+  fingerprint = sortedWords.join(' ').substring(0, 100);
+  
+  return fingerprint || null;
+}
+
+/**
+ * Enhanced deduplication using both URL and title fingerprints
+ */
+deduplicateEnhanced(results) {
+  console.log(`🔍 Enhanced deduplication: ${results.length} raw results`);
+  
+  const urlMap = new Map();
+  const titleFingerprintMap = new Map();
+  const uniqueResults = [];
+  
+  for (const result of results) {
+    if (!result || !result.url || !result.title) {
+      continue;
+    }
+    
+    // Normalize URL
+    const normalizedUrl = this.normalizeUrl(result.url);
+    if (!normalizedUrl) continue;
+    
+    // Check URL-based duplicates
+    if (urlMap.has(normalizedUrl)) {
+      console.log(`   ⚠️  Duplicate URL detected: ${result.title.substring(0, 50)}...`);
+      continue;
+    }
+    
+    // Generate title fingerprint
+    const titleFingerprint = this.generateTitleFingerprint(result.title);
+    
+    // Check title-based duplicates
+    if (titleFingerprint && titleFingerprintMap.has(titleFingerprint)) {
+      const existing = titleFingerprintMap.get(titleFingerprint);
+      console.log(`   ⚠️  Semantic duplicate detected:`);
+      console.log(`       Original: ${existing.title.substring(0, 50)}...`);
+      console.log(`       Duplicate: ${result.title.substring(0, 50)}...`);
+      
+      // Keep the one with higher relevance score
+      if ((result.relevanceScore || 50) > (existing.relevanceScore || 50)) {
+        console.log(`       → Replacing with higher relevance version`);
+        const index = uniqueResults.indexOf(existing);
+        uniqueResults[index] = {
+          ...result,
+          url: normalizedUrl,
+          titleFingerprint
+        };
+        urlMap.set(normalizedUrl, result);
+        titleFingerprintMap.set(titleFingerprint, result);
+      }
+      continue;
+    }
+    
+    // Add to unique results
+    urlMap.set(normalizedUrl, result);
+    if (titleFingerprint) {
+      titleFingerprintMap.set(titleFingerprint, result);
+    }
+    
+    uniqueResults.push({
+      ...result,
+      url: normalizedUrl,
+      titleFingerprint
+    });
+  }
+  
+  console.log(`✅ Enhanced deduplication complete:`);
+  console.log(`   Input: ${results.length} results`);
+  console.log(`   Output: ${uniqueResults.length} unique results`);
+  console.log(`   Removed: ${results.length - uniqueResults.length} duplicates\n`);
+  
+  return uniqueResults;
+}
+
+
 
   extractDomain(url) {
     try {
