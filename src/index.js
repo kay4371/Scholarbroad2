@@ -529,7 +529,7 @@ app.get('/api/index-status', async (req, res) => {
     await mongoService.connect();
     
     const indexes = await mongoService.collection.indexes();
-    const stats = await mongoService.collection.stats();
+    const totalDocuments = await mongoService.collection.countDocuments();
     
     // Check for records with null normalized fields
     const nullNormalized = await mongoService.collection.countDocuments({
@@ -556,7 +556,7 @@ app.get('/api/index-status', async (req, res) => {
         partialFilterExpression: i.partialFilterExpression || null
       })),
       stats: {
-        totalDocuments: stats.count,
+        totalDocuments: totalDocuments,
         nullNormalizedUrl: nullNormalized,
         nullIds: nullIds,
         dataHealthy: nullNormalized === 0 && nullIds === 0
@@ -572,6 +572,215 @@ app.get('/api/index-status', async (req, res) => {
     });
   }
 });
+
+/**
+ * POST /api/emergency-fix-indexes
+ * Nuclear option: Drop ALL indexes and rebuild from scratch
+ */
+app.post('/api/emergency-fix-indexes', async (req, res) => {
+  const log = [];
+  
+  try {
+    log.push('🚨 EMERGENCY INDEX FIX STARTING...');
+    log.push('');
+    
+    await mongoService.connect();
+    log.push('✅ Connected to MongoDB');
+    
+    // STEP 1: Drop ALL non-_id indexes
+    log.push('');
+    log.push('🗑️  STEP 1: Dropping all indexes...');
+    
+    try {
+      await mongoService.collection.dropIndexes();
+      log.push('   ✅ All indexes dropped (except _id)');
+    } catch (dropError) {
+      log.push(`   ⚠️  Drop all failed: ${dropError.message}`);
+      log.push('   Trying individual drops...');
+      
+      const indexes = await mongoService.collection.indexes();
+      for (const index of indexes) {
+        if (index.name !== '_id_') {
+          try {
+            await mongoService.collection.dropIndex(index.name);
+            log.push(`   ✅ Dropped: ${index.name}`);
+          } catch (e) {
+            log.push(`   ⚠️  Could not drop ${index.name}: ${e.message}`);
+          }
+        }
+      }
+    }
+    
+    // STEP 2: Check for null values
+    log.push('');
+    log.push('🔍 STEP 2: Checking data integrity...');
+    
+    const nullCount = await mongoService.collection.countDocuments({
+      $or: [
+        { normalizedUrl: null },
+        { normalizedUrl: { $exists: false } }
+      ]
+    });
+    
+    log.push(`   Found ${nullCount} records with null/missing normalizedUrl`);
+    
+    if (nullCount > 0) {
+      log.push('   🔄 Running emergency migration...');
+      
+      // Get records with null values
+      const nullRecords = await mongoService.collection.find({
+        $or: [
+          { normalizedUrl: null },
+          { normalizedUrl: { $exists: false } }
+        ]
+      }).toArray();
+      
+      let fixed = 0;
+      let deleted = 0;
+      
+      for (const record of nullRecords) {
+        try {
+          if (!record.url) {
+            // No URL at all - delete this record
+            await mongoService.collection.deleteOne({ _id: record._id });
+            deleted++;
+            continue;
+          }
+          
+          // Fix the record
+          const normalizedUrl = mongoService.normalizeUrl(record.url);
+          const shortId = mongoService.generateShortId(normalizedUrl);
+          const titleFingerprint = mongoService.generateTitleFingerprint(record.title || '');
+          
+          await mongoService.collection.updateOne(
+            { _id: record._id },
+            { 
+              $set: {
+                normalizedUrl,
+                id: shortId,
+                titleFingerprint,
+                updatedAt: new Date().toISOString()
+              }
+            }
+          );
+          fixed++;
+          
+        } catch (fixError) {
+          log.push(`   ⚠️  Could not fix record ${record._id}: ${fixError.message}`);
+        }
+      }
+      
+      log.push(`   ✅ Fixed ${fixed} records, deleted ${deleted} invalid records`);
+    } else {
+      log.push('   ✅ All records have valid data');
+    }
+    
+    // STEP 3: Create new indexes
+    log.push('');
+    log.push('🏗️  STEP 3: Creating new indexes...');
+    
+    try {
+      await mongoService.collection.createIndex(
+        { normalizedUrl: 1 }, 
+        { 
+          unique: true, 
+          name: 'idx_normalized_url'
+        }
+      );
+      log.push('   ✅ Created: idx_normalized_url (unique)');
+    } catch (e) {
+      log.push(`   ❌ Failed idx_normalized_url: ${e.message}`);
+    }
+    
+    try {
+      await mongoService.collection.createIndex(
+        { id: 1 }, 
+        { 
+          unique: true, 
+          name: 'idx_short_id'
+        }
+      );
+      log.push('   ✅ Created: idx_short_id (unique)');
+    } catch (e) {
+      log.push(`   ❌ Failed idx_short_id: ${e.message}`);
+    }
+    
+    try {
+      await mongoService.collection.createIndex(
+        { titleFingerprint: 1 }, 
+        { 
+          name: 'idx_title_fingerprint'
+        }
+      );
+      log.push('   ✅ Created: idx_title_fingerprint');
+    } catch (e) {
+      log.push(`   ❌ Failed idx_title_fingerprint: ${e.message}`);
+    }
+    
+    try {
+      await mongoService.collection.createIndex(
+        { posted: 1, scrapedAt: -1 }, 
+        { name: 'idx_posting' }
+      );
+      log.push('   ✅ Created: idx_posting');
+    } catch (e) {
+      log.push(`   ❌ Failed idx_posting: ${e.message}`);
+    }
+    
+    // STEP 4: Verify
+    log.push('');
+    log.push('✅ STEP 4: Verification...');
+    
+    const finalIndexes = await mongoService.collection.indexes();
+    const totalDocs = await mongoService.collection.countDocuments();
+    const stillNull = await mongoService.collection.countDocuments({
+      $or: [
+        { normalizedUrl: null },
+        { normalizedUrl: { $exists: false } }
+      ]
+    });
+    
+    log.push(`   Total documents: ${totalDocs}`);
+    log.push(`   Records with null normalizedUrl: ${stillNull}`);
+    log.push(`   Active indexes: ${finalIndexes.map(i => i.name).join(', ')}`);
+    
+    log.push('');
+    log.push('========================================');
+    log.push('✅ EMERGENCY FIX COMPLETE');
+    log.push('========================================');
+    
+    console.log(log.join('\n'));
+    
+    res.json({
+      success: true,
+      message: 'Emergency fix completed',
+      log,
+      summary: {
+        totalDocuments: totalDocs,
+        nullRecords: stillNull,
+        indexes: finalIndexes.map(i => i.name),
+        healthy: stillNull === 0
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    log.push('');
+    log.push('❌ EMERGENCY FIX FAILED');
+    log.push(`Error: ${error.message}`);
+    
+    console.error(log.join('\n'));
+    console.error(error.stack);
+    
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      log,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 
 // ============================================
 // GET SCHOLARSHIPS
