@@ -381,60 +381,197 @@ app.get('/api/check-duplicates', async (req, res) => {
   }
 });
 
-// ============================================
-// SCRAPE ENDPOINT
-// ============================================
-// app.post('/api/scrape', async (req, res) => {
-//   try {
-//     console.log('\n🚀 ========================================');
-//     console.log('   SCRAPE REQUEST RECEIVED');
-//     console.log('========================================');
-//     console.log(`⏰ Time: ${new Date().toISOString()}`);
-//     console.log(`📍 From: ${req.headers['user-agent'] || 'Unknown'}\n`);
+
+/**
+ * POST /api/rebuild-indexes
+ * Forcefully drops all indexes and rebuilds them correctly
+ * Use this when indexes are in a bad state
+ */
+app.post('/api/rebuild-indexes', async (req, res) => {
+  try {
+    console.log('\n🔨 Force rebuilding indexes...\n');
     
-//     console.log('🔍 Starting scholarship scraper...');
-//     const scholarships = await scraperService.scrapeAll();
-//     console.log(`✅ Scraped ${scholarships.length} scholarships`);
+    await mongoService.connect();
     
-//     console.log('\n💾 Saving to MongoDB...');
-//     const saveResult = await mongoService.saveScholarships(scholarships);
-//     console.log('✅ Saved to database');
+    // Get all current indexes
+    const indexes = await mongoService.collection.indexes();
+    console.log('📋 Current indexes:', indexes.map(i => i.name));
     
-//     const stats = await mongoService.getStats();
+    // Drop all indexes except _id (which can't be dropped)
+    const indexesToDrop = indexes
+      .map(i => i.name)
+      .filter(name => name !== '_id_');
     
-//     console.log('\n📊 Database Stats:');
-//     console.log(`   Total scholarships: ${stats?.total || 0}`);
-//     console.log(`   Countries: ${stats?.countries || 0}`);
-//     console.log(`   Fully funded: ${stats?.fullyFunded || 0}`);
+    console.log('\n🗑️  Dropping indexes:', indexesToDrop);
     
-//     console.log('\n========================================');
-//     console.log('   SCRAPE COMPLETED SUCCESSFULLY');
-//     console.log('========================================\n');
+    for (const indexName of indexesToDrop) {
+      try {
+        await mongoService.collection.dropIndex(indexName);
+        console.log(`   ✅ Dropped: ${indexName}`);
+      } catch (error) {
+        console.log(`   ⚠️  Could not drop ${indexName}: ${error.message}`);
+      }
+    }
     
-//     res.json({
-//       success: true,
-//       count: scholarships.length,
-//       saved: saveResult.insertedCount || 0,
-//       updated: saveResult.modifiedCount || 0,
-//       timestamp: new Date().toISOString(),
-//       stats: stats,
-//       scholarships: scholarships.slice(0, 10)
-//     });
+    console.log('\n🔄 Verifying all records have normalized fields...');
     
-//   } catch (error) {
-//     console.error('\n❌ ========================================');
-//     console.error('   SCRAPE FAILED');
-//     console.error('========================================');
-//     console.error(`Error: ${error.message}`);
-//     console.error('========================================\n');
+    // Double-check migration
+    const needsNormalization = await mongoService.collection.countDocuments({
+      $or: [
+        { normalizedUrl: { $exists: false } },
+        { normalizedUrl: null }
+      ]
+    });
     
-//     res.status(500).json({
-//       success: false,
-//       error: error.message,
-//       timestamp: new Date().toISOString()
-//     });
-//   }
-// });
+    if (needsNormalization > 0) {
+      console.log(`⚠️  Found ${needsNormalization} records still needing normalization`);
+      console.log('🔄 Running migration again...');
+      await mongoService.migrateExistingData();
+    } else {
+      console.log('✅ All records have normalized fields');
+    }
+    
+    console.log('\n🏗️  Creating new indexes...\n');
+    
+    // Create indexes with proper configuration
+    try {
+      await mongoService.collection.createIndex(
+        { normalizedUrl: 1 }, 
+        { 
+          unique: true, 
+          name: 'unique_normalized_url',
+          partialFilterExpression: { 
+            normalizedUrl: { $exists: true, $ne: null, $type: 'string' } 
+          }
+        }
+      );
+      console.log('   ✅ Created: unique_normalized_url (with partial filter)');
+    } catch (error) {
+      console.error('   ❌ Failed to create unique_normalized_url:', error.message);
+      throw error;
+    }
+
+    try {
+      await mongoService.collection.createIndex(
+        { id: 1 }, 
+        { 
+          unique: true, 
+          name: 'unique_short_id',
+          partialFilterExpression: { 
+            id: { $exists: true, $ne: null, $type: 'string' } 
+          }
+        }
+      );
+      console.log('   ✅ Created: unique_short_id (with partial filter)');
+    } catch (error) {
+      console.error('   ❌ Failed to create unique_short_id:', error.message);
+    }
+
+    try {
+      await mongoService.collection.createIndex(
+        { titleFingerprint: 1 }, 
+        { 
+          sparse: true, 
+          name: 'title_fingerprint_index' 
+        }
+      );
+      console.log('   ✅ Created: title_fingerprint_index (sparse)');
+    } catch (error) {
+      console.error('   ❌ Failed to create title_fingerprint_index:', error.message);
+    }
+
+    try {
+      await mongoService.collection.createIndex(
+        { posted: 1, scrapedAt: -1 }, 
+        { name: 'posting_query_index' }
+      );
+      console.log('   ✅ Created: posting_query_index');
+    } catch (error) {
+      console.error('   ❌ Failed to create posting_query_index:', error.message);
+    }
+    
+    // Get final index list
+    const finalIndexes = await mongoService.collection.indexes();
+    
+    console.log('\n📋 Final indexes:', finalIndexes.map(i => i.name));
+    console.log('\n✅ Index rebuild complete!\n');
+    
+    res.json({
+      success: true,
+      message: 'Indexes rebuilt successfully',
+      droppedIndexes: indexesToDrop,
+      currentIndexes: finalIndexes.map(i => ({
+        name: i.name,
+        key: i.key,
+        unique: i.unique || false,
+        sparse: i.sparse || false,
+        partialFilterExpression: i.partialFilterExpression || null
+      })),
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Index rebuild failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+/**
+ * GET /api/index-status
+ * Check current index status
+ */
+app.get('/api/index-status', async (req, res) => {
+  try {
+    await mongoService.connect();
+    
+    const indexes = await mongoService.collection.indexes();
+    const stats = await mongoService.collection.stats();
+    
+    // Check for records with null normalized fields
+    const nullNormalized = await mongoService.collection.countDocuments({
+      $or: [
+        { normalizedUrl: null },
+        { normalizedUrl: { $exists: false } }
+      ]
+    });
+    
+    const nullIds = await mongoService.collection.countDocuments({
+      $or: [
+        { id: null },
+        { id: { $exists: false } }
+      ]
+    });
+    
+    res.json({
+      success: true,
+      indexes: indexes.map(i => ({
+        name: i.name,
+        key: i.key,
+        unique: i.unique || false,
+        sparse: i.sparse || false,
+        partialFilterExpression: i.partialFilterExpression || null
+      })),
+      stats: {
+        totalDocuments: stats.count,
+        nullNormalizedUrl: nullNormalized,
+        nullIds: nullIds,
+        dataHealthy: nullNormalized === 0 && nullIds === 0
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Index status check failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 // ============================================
 // GET SCHOLARSHIPS
