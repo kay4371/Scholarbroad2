@@ -202,7 +202,76 @@ app.post('/api/scrape', async (req, res) => {
     });
   }
 });
+// ==========================================
+// DATA MIGRATION ENDPOINT
+// Add this to your Express routes
+// ==========================================
 
+/**
+ * POST /api/migrate-data
+ * Manually trigger data migration to add normalized fields
+ */
+app.post('/api/migrate-data', async (req, res) => {
+  try {
+    console.log('\n🔄 Starting manual data migration...\n');
+    
+    await mongoService.connect();
+    await mongoService.migrateExistingData();
+    
+    const stats = await mongoService.getPostingStats();
+    
+    res.json({
+      success: true,
+      message: 'Data migration completed successfully',
+      stats,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Migration failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * GET /api/migration-status
+ * Check how many records need migration
+ */
+app.get('/api/migration-status', async (req, res) => {
+  try {
+    await mongoService.connect();
+    
+    const total = await mongoService.collection.countDocuments();
+    const needsMigration = await mongoService.collection.countDocuments({
+      $or: [
+        { normalizedUrl: { $exists: false } },
+        { normalizedUrl: null },
+        { titleFingerprint: { $exists: false } }
+      ]
+    });
+    const migrated = total - needsMigration;
+    
+    res.json({
+      success: true,
+      total,
+      migrated,
+      needsMigration,
+      percentComplete: total > 0 ? ((migrated / total) * 100).toFixed(2) : 100,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Status check failed:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 // ============================================
 // GET SINGLE SCHOLARSHIP BY ID
 // ============================================
