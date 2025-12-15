@@ -292,43 +292,48 @@ async migrateExistingData() {
     throw error;
   }
 }
+async saveScholarships(scholarships) {
+  await this.connect();
 
-  async saveScholarships(scholarships) {
-    await this.connect();
+  let insertedCount = 0;
+  let modifiedCount = 0;
+  let skippedDuplicates = 0;
+  let errorCount = 0;
 
-    let insertedCount = 0;
-    let modifiedCount = 0;
-    let skippedDuplicates = 0;
-    let errorCount = 0;
+  console.log(`💾 Saving ${scholarships.length} scholarships with enhanced deduplication...\n`);
 
-    console.log(`💾 Saving ${scholarships.length} scholarships with enhanced deduplication...\n`);
+  for (const scholarship of scholarships) {
+    try {
+      if (!scholarship.url || !scholarship.title) {
+        errorCount++;
+        continue;
+      }
 
-    for (const scholarship of scholarships) {
-      try {
-        if (!scholarship.url || !scholarship.title) {
-          errorCount++;
-          continue;
-        }
+      // Normalize URL
+      const normalizedUrl = this.normalizeUrl(scholarship.url);
+      if (!normalizedUrl) {
+        console.log(`   ⚠️  Invalid URL, skipping: ${scholarship.title.substring(0, 50)}`);
+        errorCount++;
+        continue;
+      }
 
-        // Normalize URL
-        const normalizedUrl = this.normalizeUrl(scholarship.url);
-        if (!normalizedUrl) {
-          console.log(`   ⚠️  Invalid URL, skipping: ${scholarship.title.substring(0, 50)}`);
-          errorCount++;
-          continue;
-        }
+      // Generate identifiers
+      const shortId = this.generateShortId(normalizedUrl);
+      const titleFingerprint = this.generateTitleFingerprint(scholarship.title);
 
-        // Generate identifiers
-        const shortId = this.generateShortId(normalizedUrl);
-        const titleFingerprint = this.generateTitleFingerprint(scholarship.title);
+      // Check for existing scholarship by normalized URL
+      const existing = await this.collection.findOne({ normalizedUrl });
 
-        // Check for existing scholarship by normalized URL
-        const existing = await this.collection.findOne({ normalizedUrl });
+      if (existing) {
+        // Update existing record only if content changed
+        const hasChanges = 
+          existing.title !== scholarship.title ||
+          existing.deadline !== scholarship.deadline ||
+          existing.funding !== scholarship.funding;
 
-        if (existing) {
-          // Update existing record
-          const result = await this.collection.updateOne(
-            { normalizedUrl },
+        if (hasChanges) {
+          await this.collection.updateOne(
+            { _id: existing._id },
             { 
               $set: {
                 ...scholarship,
@@ -339,71 +344,78 @@ async migrateExistingData() {
               }
             }
           );
-
-          if (result.modifiedCount > 0) {
-            modifiedCount++;
-            console.log(`   🔄 Updated: ${scholarship.title.substring(0, 60)}...`);
-          } else {
-            skippedDuplicates++;
-          }
+          modifiedCount++;
+          console.log(`   🔄 Updated: ${scholarship.title.substring(0, 60)}...`);
         } else {
-          // Check for semantic duplicate by title fingerprint
-          if (titleFingerprint) {
-            const semanticDuplicate = await this.collection.findOne({ titleFingerprint });
-            
-            if (semanticDuplicate) {
-              skippedDuplicates++;
-              console.log(`   ⚠️  Semantic duplicate detected, skipping:`);
-              console.log(`       Existing: ${semanticDuplicate.title.substring(0, 50)}...`);
-              console.log(`       New: ${scholarship.title.substring(0, 50)}...`);
-              continue;
-            }
-          }
-
-          // Insert new scholarship
-          const scholarshipData = {
-            ...scholarship,
-            normalizedUrl,
-            id: shortId,
-            titleFingerprint,
-            posted: false,
-            lastPostedAt: null,
-            postCount: 0,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            scrapedAt: new Date().toISOString()
-          };
-
-          await this.collection.insertOne(scholarshipData);
-          insertedCount++;
-          console.log(`   ✅ New: ${scholarship.title.substring(0, 60)}...`);
-        }
-
-      } catch (error) {
-        if (error.code === 11000) {
-          // Duplicate key error - this is now expected and handled
           skippedDuplicates++;
-        } else {
-          console.error(`   ❌ Error saving scholarship: ${error.message}`);
-          errorCount++;
+        }
+        continue;
+      }
+
+      // Check for semantic duplicate by title fingerprint
+      if (titleFingerprint) {
+        const semanticDuplicate = await this.collection.findOne({ 
+          titleFingerprint,
+          _id: { $exists: true } // Ensure we're not matching null
+        });
+        
+        if (semanticDuplicate) {
+          skippedDuplicates++;
+          console.log(`   ⚠️  Semantic duplicate detected, skipping:`);
+          console.log(`       Existing: ${semanticDuplicate.title.substring(0, 50)}...`);
+          console.log(`       New: ${scholarship.title.substring(0, 50)}...`);
+          continue;
         }
       }
+
+      // Insert new scholarship
+      const scholarshipData = {
+        ...scholarship,
+        normalizedUrl,
+        id: shortId,
+        titleFingerprint,
+        posted: false,
+        lastPostedAt: null,
+        postCount: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        scrapedAt: new Date().toISOString()
+      };
+
+      try {
+        await this.collection.insertOne(scholarshipData);
+        insertedCount++;
+        console.log(`   ✅ New: ${scholarship.title.substring(0, 60)}...`);
+      } catch (insertError) {
+        if (insertError.code === 11000) {
+          // Duplicate key error during race condition
+          skippedDuplicates++;
+          console.log(`   ⏭️  Duplicate detected during insert, skipping`);
+        } else {
+          throw insertError;
+        }
+      }
+
+    } catch (error) {
+      console.error(`   ❌ Error processing scholarship: ${error.message}`);
+      errorCount++;
     }
-
-    console.log(`\n📊 Save Results:`);
-    console.log(`   ✅ Inserted: ${insertedCount} new scholarships`);
-    console.log(`   🔄 Updated: ${modifiedCount} existing scholarships`);
-    console.log(`   ⏭️  Skipped: ${skippedDuplicates} duplicates`);
-    console.log(`   ❌ Errors: ${errorCount}\n`);
-
-    return {
-      insertedCount,
-      modifiedCount,
-      skippedDuplicates,
-      errorCount,
-      totalProcessed: scholarships.length
-    };
   }
+
+  console.log(`\n📊 Save Results:`);
+  console.log(`   ✅ Inserted: ${insertedCount} new scholarships`);
+  console.log(`   🔄 Updated: ${modifiedCount} existing scholarships`);
+  console.log(`   ⏭️  Skipped: ${skippedDuplicates} duplicates`);
+  console.log(`   ❌ Errors: ${errorCount}\n`);
+
+  return {
+    insertedCount,
+    modifiedCount,
+    skippedDuplicates,
+    errorCount,
+    totalProcessed: scholarships.length
+  };
+}
 
   async getScholarshipById(id) {
     await this.connect();
