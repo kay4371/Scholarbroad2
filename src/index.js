@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const whatsappFallbackService = require('./services/whatsappFallbackService');
 const scraperService = require('./services/scraperService');
 const mongoService = require('./services/mongoService');
 const groqService = require('./services/groqService');
@@ -33,7 +34,7 @@ app.get('/', (req, res) => {
 // HEALTH CHECK
 // ============================================
 app.get('/health', (req, res) => {
-  res.json({ 
+  res.json({
     status: 'ok',
     service: 'Scholarship Scraper API',
     timestamp: new Date().toISOString(),
@@ -41,38 +42,73 @@ app.get('/health', (req, res) => {
   });
 });
 
-/**
- * NEW: Get fresh unposted scholarships for WhatsApp
- * This is the KEY endpoint to prevent duplicates!
- */
+// ============================================
+// GET FRESH UNPOSTED SCHOLARSHIPS
+// ============================================
 app.post('/api/get-unposted', async (req, res) => {
   try {
     console.log('\n🔍 ========================================');
-    console.log('   FETCHING UNPOSTED SCHOLARSHIPS');
+    console.log('  FETCHING UNPOSTED SCHOLARSHIPS');
     console.log('========================================\n');
 
     const limit = req.body.limit || 3;
-    const includeReminders = req.body.includeReminders !== false; // Default true
+    const includeReminders = req.body.includeReminders !== false;
 
-    // Get fresh unposted scholarships
+    // Get fresh unposted scholarships from database
     const freshScholarships = await mongoService.getFreshUnpostedScholarships(limit);
-    
+
     let reminderScholarships = [];
     if (includeReminders) {
-      // Get scholarships needing deadline reminders
       reminderScholarships = await mongoService.getScholarshipsNeedingReminder();
     }
 
     // Combine: fresh scholarships + max 1 reminder
-    const scholarshipsToPost = [
+    let scholarshipsToPost = [
       ...freshScholarships,
       ...(reminderScholarships.length > 0 ? [reminderScholarships[0]] : [])
     ].slice(0, limit);
 
+    // ========================================
+    // WHATSAPP FALLBACK ACTIVATION
+    // ========================================
+    let usedFallback = false;
+    if (scholarshipsToPost.length === 0) {
+      console.log('⚠️ No unposted scholarships found in database');
+      console.log('🚨 ACTIVATING WHATSAPP FALLBACK...\n');
+
+      try {
+        // Scrape WhatsApp groups
+        const whatsappScholarships = await whatsappFallbackService.checkAndActivateFallback(0);
+
+        if (whatsappScholarships.length > 0) {
+          console.log(`✅ WhatsApp fallback retrieved ${whatsappScholarships.length} scholarships`);
+
+          // Save to MongoDB (with deduplication)
+          console.log('\n💾 Saving WhatsApp scholarships to database...\n');
+          const saveResult = await mongoService.saveScholarships(whatsappScholarships);
+
+          console.log(`📊 Save results:`);
+          console.log(`  New: ${saveResult.insertedCount}`);
+          console.log(`  Updated: ${saveResult.modifiedCount}`);
+          console.log(`  Skipped: ${saveResult.skippedDuplicates}`);
+          console.log(`  Errors: ${saveResult.errorCount}\n`);
+
+          // Get the newly saved scholarships
+          scholarshipsToPost = await mongoService.getFreshUnpostedScholarships(limit);
+          usedFallback = true;
+        } else {
+          console.log('⚠️ WhatsApp fallback found no scholarships');
+        }
+      } catch (fallbackError) {
+        console.error('❌ WhatsApp fallback failed:', fallbackError.message);
+      }
+    }
+
     console.log(`\n📊 Results:`);
-    console.log(`   Fresh: ${freshScholarships.length}`);
-    console.log(`   Reminders: ${reminderScholarships.length}`);
-    console.log(`   To Post: ${scholarshipsToPost.length}`);
+    console.log(`  Fresh from DB: ${freshScholarships.length}`);
+    console.log(`  Reminders: ${reminderScholarships.length}`);
+    console.log(`  To Post: ${scholarshipsToPost.length}`);
+    console.log(`  Used Fallback: ${usedFallback ? 'YES ✅' : 'NO'}`);
     console.log('========================================\n');
 
     res.json({
@@ -81,11 +117,11 @@ app.post('/api/get-unposted', async (req, res) => {
       count: scholarshipsToPost.length,
       breakdown: {
         fresh: freshScholarships.length,
-        reminders: reminderScholarships.length
+        reminders: reminderScholarships.length,
+        fromWhatsApp: usedFallback
       },
       timestamp: new Date().toISOString()
     });
-
   } catch (error) {
     console.error('❌ Error fetching unposted:', error);
     res.status(500).json({
@@ -97,9 +133,9 @@ app.post('/api/get-unposted', async (req, res) => {
   }
 });
 
-/**
- * NEW: Mark scholarships as posted
- */
+// ============================================
+// MARK SCHOLARSHIPS AS POSTED
+// ============================================
 app.post('/api/mark-posted', async (req, res) => {
   try {
     const { scholarshipIds } = req.body;
@@ -120,8 +156,7 @@ app.post('/api/mark-posted', async (req, res) => {
     }
 
     const successCount = results.filter(r => r.success).length;
-
-    console.log(`   Success: ${successCount}/${scholarshipIds.length}\n`);
+    console.log(`  Success: ${successCount}/${scholarshipIds.length}\n`);
 
     res.json({
       success: true,
@@ -129,7 +164,6 @@ app.post('/api/mark-posted', async (req, res) => {
       total: scholarshipIds.length,
       results: results
     });
-
   } catch (error) {
     console.error('❌ Error marking as posted:', error);
     res.status(500).json({
@@ -139,18 +173,16 @@ app.post('/api/mark-posted', async (req, res) => {
   }
 });
 
-/**
- * NEW: Get posting statistics
- */
+// ============================================
+// GET POSTING STATISTICS
+// ============================================
 app.get('/api/posting-stats', async (req, res) => {
   try {
     const stats = await mongoService.getPostingStats();
-    
     res.json({
       success: true,
       stats: stats
     });
-
   } catch (error) {
     console.error('❌ Error getting stats:', error);
     res.status(500).json({
@@ -160,13 +192,13 @@ app.get('/api/posting-stats', async (req, res) => {
   }
 });
 
-/**
- * UPDATED: Scrape endpoint now saves to MongoDB automatically
- */
+// ============================================
+// SCRAPE ENDPOINT
+// ============================================
 app.post('/api/scrape', async (req, res) => {
   try {
     console.log('\n🎯 ========================================');
-    console.log('   STARTING SCHOLARSHIP SCRAPING');
+    console.log('  STARTING SCHOLARSHIP SCRAPING');
     console.log('========================================\n');
 
     // Scrape scholarships
@@ -191,7 +223,6 @@ app.post('/api/scrape', async (req, res) => {
       },
       timestamp: new Date().toISOString()
     });
-
   } catch (error) {
     console.error('❌ Scraping error:', error);
     res.status(500).json({
@@ -202,31 +233,25 @@ app.post('/api/scrape', async (req, res) => {
     });
   }
 });
-// ==========================================
-// DATA MIGRATION ENDPOINT
-// Add this to your Express routes
-// ==========================================
 
-/**
- * POST /api/migrate-data
- * Manually trigger data migration to add normalized fields
- */
+// ============================================
+// DATA MIGRATION ENDPOINT
+// ============================================
 app.post('/api/migrate-data', async (req, res) => {
   try {
     console.log('\n🔄 Starting manual data migration...\n');
-    
+
     await mongoService.connect();
     await mongoService.migrateExistingData();
-    
+
     const stats = await mongoService.getPostingStats();
-    
+
     res.json({
       success: true,
       message: 'Data migration completed successfully',
       stats,
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     console.error('❌ Migration failed:', error);
     res.status(500).json({
@@ -237,14 +262,13 @@ app.post('/api/migrate-data', async (req, res) => {
   }
 });
 
-/**
- * GET /api/migration-status
- * Check how many records need migration
- */
+// ============================================
+// MIGRATION STATUS
+// ============================================
 app.get('/api/migration-status', async (req, res) => {
   try {
     await mongoService.connect();
-    
+
     const total = await mongoService.collection.countDocuments();
     const needsMigration = await mongoService.collection.countDocuments({
       $or: [
@@ -253,8 +277,9 @@ app.get('/api/migration-status', async (req, res) => {
         { titleFingerprint: { $exists: false } }
       ]
     });
+
     const migrated = total - needsMigration;
-    
+
     res.json({
       success: true,
       total,
@@ -263,7 +288,6 @@ app.get('/api/migration-status', async (req, res) => {
       percentComplete: total > 0 ? ((migrated / total) * 100).toFixed(2) : 100,
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     console.error('❌ Status check failed:', error);
     res.status(500).json({
@@ -272,6 +296,7 @@ app.get('/api/migration-status', async (req, res) => {
     });
   }
 });
+
 // ============================================
 // GET SINGLE SCHOLARSHIP BY ID
 // ============================================
@@ -279,43 +304,39 @@ app.get('/api/scholarship/:id', async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`📖 Fetching scholarship with ID: ${id}`);
-    
+
     const scholarship = await mongoService.getScholarshipById(id);
-    
+
     if (!scholarship) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: 'Scholarship not found' 
+        error: 'Scholarship not found'
       });
     }
-    
+
     res.json({
       success: true,
       scholarship
     });
-    
   } catch (error) {
     console.error('❌ Error fetching scholarship:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: 'Failed to fetch scholarship' 
+      error: 'Failed to fetch scholarship'
     });
   }
 });
 
-
-/**
- * POST /api/cleanup-duplicates
- * Scans database and merges duplicate scholarships
- */
+// ============================================
+// CLEANUP DUPLICATES
+// ============================================
 app.post('/api/cleanup-duplicates', async (req, res) => {
   try {
     console.log('\n🧹 Starting duplicate cleanup process...\n');
-    
+
     const mergedCount = await mongoService.findAndMergeDuplicates();
-    
     const stats = await mongoService.getPostingStats();
-    
+
     res.json({
       success: true,
       message: 'Duplicate cleanup completed',
@@ -325,7 +346,6 @@ app.post('/api/cleanup-duplicates', async (req, res) => {
       },
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     console.error('❌ Cleanup failed:', error);
     res.status(500).json({
@@ -336,20 +356,18 @@ app.post('/api/cleanup-duplicates', async (req, res) => {
   }
 });
 
-/**
- * GET /api/check-duplicates
- * Returns information about potential duplicates without deleting
- */
+// ============================================
+// CHECK DUPLICATES
+// ============================================
 app.get('/api/check-duplicates', async (req, res) => {
   try {
     await mongoService.connect();
-    
-    // Find potential duplicates by title fingerprint
+
     const duplicates = await mongoService.collection.aggregate([
       { $match: { titleFingerprint: { $exists: true, $ne: null } } },
-      { 
-        $group: { 
-          _id: '$titleFingerprint', 
+      {
+        $group: {
+          _id: '$titleFingerprint',
           count: { $sum: 1 },
           titles: { $push: '$title' },
           ids: { $push: '$id' }
@@ -359,7 +377,7 @@ app.get('/api/check-duplicates', async (req, res) => {
       { $sort: { count: -1 } },
       { $limit: 50 }
     ]).toArray();
-    
+
     res.json({
       success: true,
       duplicateGroups: duplicates.length,
@@ -371,7 +389,6 @@ app.get('/api/check-duplicates', async (req, res) => {
       })),
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     console.error('❌ Check failed:', error);
     res.status(500).json({
@@ -381,121 +398,109 @@ app.get('/api/check-duplicates', async (req, res) => {
   }
 });
 
-
-/**
- * POST /api/rebuild-indexes
- * Forcefully drops all indexes and rebuilds them correctly
- * Use this when indexes are in a bad state
- */
+// ============================================
+// REBUILD INDEXES
+// ============================================
 app.post('/api/rebuild-indexes', async (req, res) => {
   try {
     console.log('\n🔨 Force rebuilding indexes...\n');
-    
+
     await mongoService.connect();
-    
-    // Get all current indexes
+
     const indexes = await mongoService.collection.indexes();
     console.log('📋 Current indexes:', indexes.map(i => i.name));
-    
-    // Drop all indexes except _id (which can't be dropped)
+
     const indexesToDrop = indexes
       .map(i => i.name)
       .filter(name => name !== '_id_');
-    
-    console.log('\n🗑️  Dropping indexes:', indexesToDrop);
-    
+
+    console.log('\n🗑️ Dropping indexes:', indexesToDrop);
+
     for (const indexName of indexesToDrop) {
       try {
         await mongoService.collection.dropIndex(indexName);
-        console.log(`   ✅ Dropped: ${indexName}`);
+        console.log(`  ✅ Dropped: ${indexName}`);
       } catch (error) {
-        console.log(`   ⚠️  Could not drop ${indexName}: ${error.message}`);
+        console.log(`  ⚠️ Could not drop ${indexName}: ${error.message}`);
       }
     }
-    
+
     console.log('\n🔄 Verifying all records have normalized fields...');
-    
-    // Double-check migration
+
     const needsNormalization = await mongoService.collection.countDocuments({
       $or: [
         { normalizedUrl: { $exists: false } },
         { normalizedUrl: null }
       ]
     });
-    
+
     if (needsNormalization > 0) {
-      console.log(`⚠️  Found ${needsNormalization} records still needing normalization`);
+      console.log(`⚠️ Found ${needsNormalization} records still needing normalization`);
       console.log('🔄 Running migration again...');
       await mongoService.migrateExistingData();
     } else {
       console.log('✅ All records have normalized fields');
     }
-    
-    console.log('\n🏗️  Creating new indexes...\n');
-    
-    // Create indexes with proper configuration
+
+    console.log('\n🏗️ Creating new indexes...\n');
+
     try {
       await mongoService.collection.createIndex(
-        { normalizedUrl: 1 }, 
-        { 
-          unique: true, 
+        { normalizedUrl: 1 },
+        {
+          unique: true,
           name: 'unique_normalized_url',
-          partialFilterExpression: { 
-            normalizedUrl: { $exists: true, $ne: null, $type: 'string' } 
+          partialFilterExpression: {
+            normalizedUrl: { $exists: true, $ne: null, $type: 'string' }
           }
         }
       );
-      console.log('   ✅ Created: unique_normalized_url (with partial filter)');
+      console.log('  ✅ Created: unique_normalized_url (with partial filter)');
     } catch (error) {
-      console.error('   ❌ Failed to create unique_normalized_url:', error.message);
+      console.error('  ❌ Failed to create unique_normalized_url:', error.message);
       throw error;
     }
 
     try {
       await mongoService.collection.createIndex(
-        { id: 1 }, 
-        { 
-          unique: true, 
+        { id: 1 },
+        {
+          unique: true,
           name: 'unique_short_id',
-          partialFilterExpression: { 
-            id: { $exists: true, $ne: null, $type: 'string' } 
+          partialFilterExpression: {
+            id: { $exists: true, $ne: null, $type: 'string' }
           }
         }
       );
-      console.log('   ✅ Created: unique_short_id (with partial filter)');
+      console.log('  ✅ Created: unique_short_id (with partial filter)');
     } catch (error) {
-      console.error('   ❌ Failed to create unique_short_id:', error.message);
+      console.error('  ❌ Failed to create unique_short_id:', error.message);
     }
 
     try {
       await mongoService.collection.createIndex(
-        { titleFingerprint: 1 }, 
-        { 
-          sparse: true, 
-          name: 'title_fingerprint_index' 
-        }
+        { titleFingerprint: 1 },
+        { sparse: true, name: 'title_fingerprint_index' }
       );
-      console.log('   ✅ Created: title_fingerprint_index (sparse)');
+      console.log('  ✅ Created: title_fingerprint_index (sparse)');
     } catch (error) {
-      console.error('   ❌ Failed to create title_fingerprint_index:', error.message);
+      console.error('  ❌ Failed to create title_fingerprint_index:', error.message);
     }
 
     try {
       await mongoService.collection.createIndex(
-        { posted: 1, scrapedAt: -1 }, 
+        { posted: 1, scrapedAt: -1 },
         { name: 'posting_query_index' }
       );
-      console.log('   ✅ Created: posting_query_index');
+      console.log('  ✅ Created: posting_query_index');
     } catch (error) {
-      console.error('   ❌ Failed to create posting_query_index:', error.message);
+      console.error('  ❌ Failed to create posting_query_index:', error.message);
     }
-    
-    // Get final index list
+
     const finalIndexes = await mongoService.collection.indexes();
-    
     console.log('\n📋 Final indexes:', finalIndexes.map(i => i.name));
     console.log('\n✅ Index rebuild complete!\n');
-    
+
     res.json({
       success: true,
       message: 'Indexes rebuilt successfully',
@@ -509,7 +514,6 @@ app.post('/api/rebuild-indexes', async (req, res) => {
       })),
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     console.error('❌ Index rebuild failed:', error);
     res.status(500).json({
@@ -520,32 +524,31 @@ app.post('/api/rebuild-indexes', async (req, res) => {
     });
   }
 });
-/**
- * GET /api/index-status
- * Check current index status
- */
+
+// ============================================
+// INDEX STATUS
+// ============================================
 app.get('/api/index-status', async (req, res) => {
   try {
     await mongoService.connect();
-    
+
     const indexes = await mongoService.collection.indexes();
     const totalDocuments = await mongoService.collection.countDocuments();
-    
-    // Check for records with null normalized fields
+
     const nullNormalized = await mongoService.collection.countDocuments({
       $or: [
         { normalizedUrl: null },
         { normalizedUrl: { $exists: false } }
       ]
     });
-    
+
     const nullIds = await mongoService.collection.countDocuments({
       $or: [
         { id: null },
         { id: { $exists: false } }
       ]
     });
-    
+
     res.json({
       success: true,
       indexes: indexes.map(i => ({
@@ -563,7 +566,6 @@ app.get('/api/index-status', async (req, res) => {
       },
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     console.error('❌ Index status check failed:', error);
     res.status(500).json({
@@ -573,88 +575,82 @@ app.get('/api/index-status', async (req, res) => {
   }
 });
 
-/**
- * POST /api/emergency-fix-indexes
- * Nuclear option: Drop ALL indexes and rebuild from scratch
- */
+// ============================================
+// EMERGENCY FIX INDEXES
+// ============================================
 app.post('/api/emergency-fix-indexes', async (req, res) => {
   const log = [];
-  
+
   try {
     log.push('🚨 EMERGENCY INDEX FIX STARTING...');
     log.push('');
-    
+
     await mongoService.connect();
     log.push('✅ Connected to MongoDB');
-    
-    // STEP 1: Drop ALL non-_id indexes
+
     log.push('');
-    log.push('🗑️  STEP 1: Dropping all indexes...');
-    
+    log.push('🗑️ STEP 1: Dropping all indexes...');
+
     try {
       await mongoService.collection.dropIndexes();
-      log.push('   ✅ All indexes dropped (except _id)');
+      log.push('  ✅ All indexes dropped (except _id)');
     } catch (dropError) {
-      log.push(`   ⚠️  Drop all failed: ${dropError.message}`);
-      log.push('   Trying individual drops...');
-      
+      log.push(`  ⚠️ Drop all failed: ${dropError.message}`);
+      log.push('  Trying individual drops...');
+
       const indexes = await mongoService.collection.indexes();
       for (const index of indexes) {
         if (index.name !== '_id_') {
           try {
             await mongoService.collection.dropIndex(index.name);
-            log.push(`   ✅ Dropped: ${index.name}`);
+            log.push(`  ✅ Dropped: ${index.name}`);
           } catch (e) {
-            log.push(`   ⚠️  Could not drop ${index.name}: ${e.message}`);
+            log.push(`  ⚠️ Could not drop ${index.name}: ${e.message}`);
           }
         }
       }
     }
-    
-    // STEP 2: Check for null values
+
     log.push('');
     log.push('🔍 STEP 2: Checking data integrity...');
-    
+
     const nullCount = await mongoService.collection.countDocuments({
       $or: [
         { normalizedUrl: null },
         { normalizedUrl: { $exists: false } }
       ]
     });
-    
-    log.push(`   Found ${nullCount} records with null/missing normalizedUrl`);
-    
+
+    log.push(`  Found ${nullCount} records with null/missing normalizedUrl`);
+
     if (nullCount > 0) {
-      log.push('   🔄 Running emergency migration...');
-      
-      // Get records with null values
+      log.push('  🔄 Running emergency migration...');
+
       const nullRecords = await mongoService.collection.find({
         $or: [
           { normalizedUrl: null },
           { normalizedUrl: { $exists: false } }
         ]
       }).toArray();
-      
+
       let fixed = 0;
       let deleted = 0;
-      
+
       for (const record of nullRecords) {
         try {
           if (!record.url) {
-            // No URL at all - delete this record
             await mongoService.collection.deleteOne({ _id: record._id });
             deleted++;
             continue;
           }
-          
-          // Fix the record
+
           const normalizedUrl = mongoService.normalizeUrl(record.url);
           const shortId = mongoService.generateShortId(normalizedUrl);
           const titleFingerprint = mongoService.generateTitleFingerprint(record.title || '');
-          
+
           await mongoService.collection.updateOne(
             { _id: record._id },
-            { 
+            {
               $set: {
                 normalizedUrl,
                 id: shortId,
@@ -664,73 +660,62 @@ app.post('/api/emergency-fix-indexes', async (req, res) => {
             }
           );
           fixed++;
-          
         } catch (fixError) {
-          log.push(`   ⚠️  Could not fix record ${record._id}: ${fixError.message}`);
+          log.push(`  ⚠️ Could not fix record ${record._id}: ${fixError.message}`);
         }
       }
-      
-      log.push(`   ✅ Fixed ${fixed} records, deleted ${deleted} invalid records`);
+
+      log.push(`  ✅ Fixed ${fixed} records, deleted ${deleted} invalid records`);
     } else {
-      log.push('   ✅ All records have valid data');
+      log.push('  ✅ All records have valid data');
     }
-    
-    // STEP 3: Create new indexes
+
     log.push('');
-    log.push('🏗️  STEP 3: Creating new indexes...');
-    
+    log.push('🏗️ STEP 3: Creating new indexes...');
+
     try {
       await mongoService.collection.createIndex(
-        { normalizedUrl: 1 }, 
-        { 
-          unique: true, 
-          name: 'idx_normalized_url'
-        }
+        { normalizedUrl: 1 },
+        { unique: true, name: 'idx_normalized_url' }
       );
-      log.push('   ✅ Created: idx_normalized_url (unique)');
+      log.push('  ✅ Created: idx_normalized_url (unique)');
     } catch (e) {
-      log.push(`   ❌ Failed idx_normalized_url: ${e.message}`);
+      log.push(`  ❌ Failed idx_normalized_url: ${e.message}`);
     }
-    
+
     try {
       await mongoService.collection.createIndex(
-        { id: 1 }, 
-        { 
-          unique: true, 
-          name: 'idx_short_id'
-        }
+        { id: 1 },
+        { unique: true, name: 'idx_short_id' }
       );
-      log.push('   ✅ Created: idx_short_id (unique)');
+      log.push('  ✅ Created: idx_short_id (unique)');
     } catch (e) {
-      log.push(`   ❌ Failed idx_short_id: ${e.message}`);
+      log.push(`  ❌ Failed idx_short_id: ${e.message}`);
     }
-    
+
     try {
       await mongoService.collection.createIndex(
-        { titleFingerprint: 1 }, 
-        { 
-          name: 'idx_title_fingerprint'
-        }
+        { titleFingerprint: 1 },
+        { name: 'idx_title_fingerprint' }
       );
-      log.push('   ✅ Created: idx_title_fingerprint');
+      log.push('  ✅ Created: idx_title_fingerprint');
     } catch (e) {
-      log.push(`   ❌ Failed idx_title_fingerprint: ${e.message}`);
+      log.push(`  ❌ Failed idx_title_fingerprint: ${e.message}`);
     }
-    
+
     try {
       await mongoService.collection.createIndex(
-        { posted: 1, scrapedAt: -1 }, 
+        { posted: 1, scrapedAt: -1 },
         { name: 'idx_posting' }
       );
-      log.push('   ✅ Created: idx_posting');
+      log.push('  ✅ Created: idx_posting');
     } catch (e) {
-      log.push(`   ❌ Failed idx_posting: ${e.message}`);
+      log.push(`  ❌ Failed idx_posting: ${e.message}`);
     }
-    
-    // STEP 4: Verify
+
     log.push('');
     log.push('✅ STEP 4: Verification...');
-    
+
     const finalIndexes = await mongoService.collection.indexes();
     const totalDocs = await mongoService.collection.countDocuments();
     const stillNull = await mongoService.collection.countDocuments({
@@ -739,18 +724,18 @@ app.post('/api/emergency-fix-indexes', async (req, res) => {
         { normalizedUrl: { $exists: false } }
       ]
     });
-    
-    log.push(`   Total documents: ${totalDocs}`);
-    log.push(`   Records with null normalizedUrl: ${stillNull}`);
-    log.push(`   Active indexes: ${finalIndexes.map(i => i.name).join(', ')}`);
-    
+
+    log.push(`  Total documents: ${totalDocs}`);
+    log.push(`  Records with null normalizedUrl: ${stillNull}`);
+    log.push(`  Active indexes: ${finalIndexes.map(i => i.name).join(', ')}`);
+
     log.push('');
     log.push('========================================');
     log.push('✅ EMERGENCY FIX COMPLETE');
     log.push('========================================');
-    
+
     console.log(log.join('\n'));
-    
+
     res.json({
       success: true,
       message: 'Emergency fix completed',
@@ -763,15 +748,14 @@ app.post('/api/emergency-fix-indexes', async (req, res) => {
       },
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     log.push('');
     log.push('❌ EMERGENCY FIX FAILED');
     log.push(`Error: ${error.message}`);
-    
+
     console.error(log.join('\n'));
     console.error(error.stack);
-    
+
     res.status(500).json({
       success: false,
       error: error.message,
@@ -781,7 +765,6 @@ app.post('/api/emergency-fix-indexes', async (req, res) => {
   }
 });
 
-
 // ============================================
 // GET SCHOLARSHIPS
 // ============================================
@@ -789,16 +772,15 @@ app.get('/api/scholarships', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 30;
     console.log(`📦 Fetching ${limit} latest scholarships from MongoDB...`);
-    
+
     const scholarships = await mongoService.getLatestScholarships(limit);
-    
+
     res.json({
       success: true,
       count: scholarships.length,
       scholarships,
       timestamp: new Date().toISOString()
     });
-    
   } catch (error) {
     console.error('❌ Fetch error:', error.message);
     res.status(500).json({
@@ -834,9 +816,9 @@ app.get('/api/debug/ids', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
     console.log(`🔍 Fetching ${limit} scholarship IDs for debugging...`);
-    
+
     const ids = await mongoService.listAllIds(limit);
-    
+
     res.json({
       success: true,
       count: ids.length,
@@ -845,9 +827,9 @@ app.get('/api/debug/ids', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching IDs:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: error.message 
+      error: error.message
     });
   }
 });
@@ -859,7 +841,7 @@ app.get('/api/test', async (req, res) => {
   try {
     const scraperHealth = scraperService.getHealthStatus();
     const groqHealth = groqService.getHealthStatus();
-    
+
     let mongoConnected = false;
     try {
       await mongoService.connect();
@@ -867,7 +849,7 @@ app.get('/api/test', async (req, res) => {
     } catch (err) {
       mongoConnected = false;
     }
-    
+
     res.json({
       status: 'ok',
       services: {
@@ -881,8 +863,8 @@ app.get('/api/test', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(500).json({ 
-      error: error.message 
+    res.status(500).json({
+      error: error.message
     });
   }
 });
@@ -891,15 +873,15 @@ app.get('/api/test', async (req, res) => {
 // ERROR HANDLERS
 // ============================================
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Not found',
-    path: req.path 
+    path: req.path
   });
 });
 
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled error:', err.message);
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'Internal server error',
     message: err.message
   });
@@ -910,20 +892,20 @@ app.use((err, req, res, next) => {
 // ============================================
 app.listen(PORT, () => {
   console.log('\n🚀 ========================================');
-  console.log('   SCHOLARSHIP SCRAPER API');
+  console.log('  SCHOLARSHIP SCRAPER API');
   console.log('========================================');
   console.log(`📍 Port: ${PORT}`);
   console.log(`🌍 URL: http://localhost:${PORT}`);
   console.log(`⏰ Started: ${new Date().toISOString()}`);
   console.log('\n📋 Endpoints:');
-  console.log(`   GET  /                    - API info`);
-  console.log(`   GET  /health              - Health check`);
-  console.log(`   POST /api/scrape          - Trigger scraping`);
-  console.log(`   GET  /api/scholarships    - Get scholarships`);
-  console.log(`   GET  /api/scholarship/:id - Get single scholarship`);
-  console.log(`   GET  /api/stats           - Get statistics`);
-  console.log(`   GET  /api/debug/ids       - List scholarship IDs (debug)`);
-  console.log(`   GET  /api/test            - Test all services`);
+  console.log(`  GET  / - API info`);
+  console.log(`  GET  /health - Health check`);
+  console.log(`  POST /api/scrape - Trigger scraping`);
+  console.log(`  GET  /api/scholarships - Get scholarships`);
+  console.log(`  GET  /api/scholarship/:id - Get single scholarship`);
+  console.log(`  GET  /api/stats - Get statistics`);
+  console.log(`  GET  /api/debug/ids - List scholarship IDs (debug)`);
+  console.log(`  GET  /api/test - Test all services`);
   console.log('========================================\n');
 });
 
