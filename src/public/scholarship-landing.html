@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="page-title">Chevening Scholarship 2026 — ScholarBroad</title>
+<meta name="description" id="meta-desc" content="Full funding scholarship for international students. Deadline: November 5, 2026.">
+<!-- Open Graph for WhatsApp link previews -->
+<meta property="og:title" id="og-title" content="Chevening Scholarship 2026">
+<meta property="og:description" id="og-desc" content="Full funding. UK. Deadline: Nov 5, 2026">
+<meta property="og:image" content="https://scholarbroad.suntrenia.com/og-cover.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #06090f;
+    --surface: #0f1623;
+    --surface2: #1a2236;
+    --border: rgba(255,255,255,0.08);
+    --text: #eef2ff;
+    --muted: #7a8499;
+    --accent: #00e5a0;
+    --accent2: #0095ff;
+    --gold: #f5c518;
+    --danger: #ff4d6d;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* BG GLOW */
+  .bg-glow {
+    position: fixed; top: -200px; left: 50%; transform: translateX(-50%);
+    width: 700px; height: 400px;
+    background: radial-gradient(ellipse, rgba(0,229,160,0.08) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* HEADER */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(6,9,15,0.85); backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; color: var(--accent); }
+  .header-cta {
+    background: var(--accent); color: #000;
+    border: none; border-radius: 8px; padding: 8px 18px;
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 13px;
+    cursor: pointer; text-decoration: none; display: inline-block;
+  }
+
+  /* MAIN LAYOUT */
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 20px 80px; position: relative; z-index: 1; }
+
+  /* BREADCRUMB */
+  .breadcrumb { font-size: 12px; color: var(--muted); margin-bottom: 24px; display: flex; align-items: center; gap: 6px; }
+  .breadcrumb a { color: var(--accent); text-decoration: none; }
+  .breadcrumb span { color: var(--muted); }
+
+  /* HERO CARD */
+  .hero-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px; padding: 32px;
+    margin-bottom: 20px;
+    position: relative; overflow: hidden;
+  }
+  .hero-card::before {
+    content: ''; position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+  .hero-flag { font-size: 36px; margin-bottom: 12px; }
+  .hero-title {
+    font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 28px; line-height: 1.2; margin-bottom: 12px;
+  }
+  .hero-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+  .tag {
+    padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .tag-green { background: rgba(0,229,160,0.12); color: var(--accent); border: 1px solid rgba(0,229,160,0.2); }
+  .tag-blue { background: rgba(0,149,255,0.12); color: var(--accent2); border: 1px solid rgba(0,149,255,0.2); }
+  .tag-gold { background: rgba(245,197,24,0.12); color: var(--gold); border: 1px solid rgba(245,197,24,0.2); }
+  .tag-red { background: rgba(255,77,109,0.12); color: var(--danger); border: 1px solid rgba(255,77,109,0.2); }
+
+  .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
+  .info-item {
+    background: var(--surface2); border-radius: 10px; padding: 14px;
+    border: 1px solid var(--border);
+  }
+  .info-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .info-value { font-weight: 600; font-size: 14px; }
+  .info-value.accent { color: var(--accent); }
+  .info-value.gold { color: var(--gold); }
+  .info-value.danger { color: var(--danger); }
+
+  /* DEADLINE URGENCY */
+  .deadline-bar {
+    background: linear-gradient(135deg, rgba(255,77,109,0.08), rgba(245,197,24,0.08));
+    border: 1px solid rgba(255,77,109,0.2);
+    border-radius: 10px; padding: 14px 18px;
+    display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+  }
+  .deadline-icon { font-size: 22px; }
+  .deadline-text strong { display: block; font-size: 14px; font-weight: 600; color: var(--gold); }
+  .deadline-text span { font-size: 12px; color: var(--muted); }
+  .days-left {
+    margin-left: auto; font-family: 'Syne', sans-serif; font-weight: 800;
+    font-size: 22px; color: var(--danger);
+  }
+  .days-left small { font-size: 11px; font-weight: 400; color: var(--muted); display: block; text-align: center; }
+
+  /* DESCRIPTION */
+  .desc { font-size: 14.5px; line-height: 1.75; color: #b0bcd4; margin-bottom: 20px; }
+
+  /* ACTION BUTTONS */
+  .action-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn-official {
+    flex: 1; min-width: 200px;
+    background: linear-gradient(135deg, var(--accent), #00b87a);
+    color: #000; border: none; border-radius: 10px;
+    padding: 14px 24px; font-family: 'DM Sans', sans-serif;
+    font-weight: 700; font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: transform 0.15s, box-shadow 0.15s;
+    text-decoration: none;
+  }
+  .btn-official:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,229,160,0.25); }
+  .btn-share {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 10px; padding: 14px 18px;
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 14px;
+    cursor: pointer; display: flex; align-items: center; gap: 7px;
+    transition: background 0.15s;
+  }
+  .btn-share:hover { background: #1e2d45; }
+
+  /* UPSELL CARD */
+  .upsell-card {
+    background: linear-gradient(135deg, rgba(0,229,160,0.05), rgba(0,149,255,0.05));
+    border: 1px solid rgba(0,229,160,0.15);
+    border-radius: 16px; padding: 24px; margin-bottom: 20px;
+  }
+  .upsell-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 17px; margin-bottom: 6px; }
+  .upsell-sub { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+  .upsell-features { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+  .upsell-feat {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: #c0ccdd;
+  }
+  .upsell-feat::before { content: '✓'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
+  .upsell-actions { display: flex; gap: 10px; align-items: center; }
+  .btn-upsell {
+    background: var(--accent); color: #000; border: none;
+    border-radius: 8px; padding: 11px 22px;
+    font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 14px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-upsell:hover { background: #00c88a; transform: translateY(-1px); }
+  .upsell-price { font-size: 13px; color: var(--muted); }
+  .upsell-price strong { color: var(--accent); }
+
+  /* EMAIL CAPTURE */
+  .capture-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 22px; margin-bottom: 20px;
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  }
+  .capture-icon { font-size: 32px; flex-shrink: 0; }
+  .capture-text { flex: 1; min-width: 180px; }
+  .capture-text strong { display: block; font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .capture-text span { font-size: 13px; color: var(--muted); }
+  .capture-form { display: flex; gap: 8px; flex-wrap: wrap; }
+  .capture-input {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text);
+    font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none;
+    width: 220px; transition: border 0.15s;
+  }
+  .capture-input:focus { border-color: var(--accent); }
+  .btn-capture {
+    background: var(--surface2); border: 1px solid rgba(0,229,160,0.3);
+    color: var(--accent); border-radius: 8px; padding: 10px 16px;
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 13px;
+    cursor: pointer; white-space: nowrap; transition: all 0.15s;
+  }
+  .btn-capture:hover { background: rgba(0,229,160,0.1); }
+
+  /* AFFILIATE OFFERS */
+  .affiliate-section { margin-bottom: 20px; }
+  .affiliate-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+  .affiliate-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .affiliate-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s; text-decoration: none;
+  }
+  .affiliate-card:hover { border-color: var(--border); background: var(--surface2); }
+  .aff-icon { font-size: 24px; margin-bottom: 8px; }
+  .aff-name { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+  .aff-desc { font-size: 11.5px; color: var(--muted); line-height: 1.4; }
+  .aff-badge { font-size: 10px; color: var(--gold); font-weight: 600; margin-top: 6px; }
+
+  /* MORE SCHOLARSHIPS */
+  .more-section { margin-bottom: 20px; }
+  .more-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 14px; }
+  .more-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .more-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; cursor: pointer;
+    transition: border-color 0.15s; text-decoration: none; color: var(--text);
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .more-card:hover { border-color: var(--border); background: var(--surface2); }
+  .more-flag { font-size: 24px; flex-shrink: 0; }
+  .more-info .more-name { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+  .more-info .more-meta { font-size: 11.5px; color: var(--muted); }
+
+  /* FOOTER */
+  .page-footer {
+    text-align: center; padding: 30px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--muted);
+  }
+  .page-footer a { color: var(--accent); text-decoration: none; }
+
+  /* SUCCESS STATE */
+  .success-msg {
+    display: none; color: var(--accent);
+    font-size: 13px; font-weight: 500;
+    padding: 8px 14px; background: rgba(0,229,160,0.1);
+    border-radius: 8px; border: 1px solid rgba(0,229,160,0.2);
+  }
+
+  @media (max-width: 640px) {
+    .info-grid { grid-template-columns: repeat(2, 1fr); }
+    .affiliate-grid { grid-template-columns: 1fr 1fr; }
+    .upsell-features { grid-template-columns: 1fr; }
+    .more-grid { grid-template-columns: 1fr; }
+    .hero-title { font-size: 22px; }
+    .capture-input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-glow"></div>
+
+<header>
+  <div class="logo">ScholarBroad</div>
+  <a href="https://scholarbroad.suntrenia.com/join" class="header-cta">Join Free → Get Daily Alerts</a>
+</header>
+
+<div class="container">
+  <div class="breadcrumb">
+    <a href="/">Home</a>
+    <span>›</span>
+    <a href="/scholarships">Scholarships</a>
+    <span>›</span>
+    <span id="breadcrumb-title">Chevening 2026</span>
+  </div>
+
+  <!-- HERO CARD -->
+  <div class="hero-card">
+    <div class="hero-flag" id="s-flag">🇬🇧</div>
+    <div class="hero-title" id="s-title">Chevening Scholarship 2026 — United Kingdom</div>
+    <div class="hero-tags">
+      <span class="tag tag-green" id="s-funding">💰 Fully Funded</span>
+      <span class="tag tag-blue" id="s-degree">🎓 Masters</span>
+      <span class="tag tag-gold" id="s-country">🌍 Open Worldwide</span>
+      <span class="tag tag-red" id="s-deadline-tag">⏰ Deadline Approaching</span>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="info-label">Host Country</div>
+        <div class="info-value" id="s-host">🇬🇧 United Kingdom</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Degree Level</div>
+        <div class="info-value accent" id="s-level">Masters (1 year)</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Funding</div>
+        <div class="info-value gold" id="s-fund-detail">Full — Tuition + Living</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Application Deadline</div>
+        <div class="info-value danger" id="s-deadline">November 5, 2026</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Eligible Countries</div>
+        <div class="info-value" id="s-eligible">160+ Countries</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">Field of Study</div>
+        <div class="info-value" id="s-field">All Fields</div>
+      </div>
+    </div>
+
+    <!-- DEADLINE URGENCY BAR -->
+    <div class="deadline-bar">
+      <div class="deadline-icon">🔔</div>
+      <div class="deadline-text">
+        <strong id="urgency-text">Application closes November 5, 2026</strong>
+        <span>Don't miss this opportunity — start your application early</span>
+      </div>
+      <div class="days-left" id="days-left">178<small>days left</small></div>
+    </div>
+
+    <!-- DESCRIPTION -->
+    <div class="desc" id="s-desc">
+      The Chevening Scholarship is the UK government's international awards programme, funded by the Foreign, Commonwealth & Development Office (FCDO). It offers full financial support to outstanding individuals with leadership potential to study any subject at any UK university for one year. Benefits include full tuition, a monthly stipend, travel allowance, and visa fees covered.
+    </div>
+
+    <!-- ACTION BUTTONS -->
+    <div class="action-row">
+      <a href="#" id="official-link" class="btn-official" onclick="trackClick()">
+        🎓 Go to Official Application Page
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+      <button class="btn-share" onclick="shareThis()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Share
+      </button>
+      <button class="btn-share" onclick="saveScholarship()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        <span id="save-btn-text">Save</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- UPSELL: LET US HELP YOU APPLY -->
+  <div class="upsell-card">
+    <div class="upsell-title">🚀 Let ScholarBroad help you apply for this scholarship</div>
+    <div class="upsell-sub">Our Pro plan automates the hardest parts — finding professors, writing emails, generating essays, and preparing you for interviews.</div>
+    <div class="upsell-features">
+      <div class="upsell-feat">Find professors who need your profile</div>
+      <div class="upsell-feat">AI-generated, tailored cold emails</div>
+      <div class="upsell-feat">Essay generation (humanized)</div>
+      <div class="upsell-feat">Interview coaching (Parakleet)</div>
+      <div class="upsell-feat">Auto follow-up reminders</div>
+      <div class="upsell-feat">Send from your own Gmail address</div>
+    </div>
+    <div class="upsell-actions">
+      <button class="btn-upsell" onclick="window.location='https://scholarbroad.suntrenia.com/pro'">Get Pro — Start Applying Smarter</button>
+      <div class="upsell-price">From <strong>₦6,000/month</strong> · Cancel anytime</div>
+    </div>
+  </div>
+
+  <!-- EMAIL CAPTURE -->
+  <div class="capture-card">
+    <div class="capture-icon">📅</div>
+    <div class="capture-text">
+      <strong>Get a reminder before this scholarship closes</strong>
+      <span>We'll email you 30 days, 14 days, and 7 days before the deadline</span>
+    </div>
+    <div class="capture-form">
+      <input class="capture-input" type="email" id="capture-email" placeholder="your@email.com">
+      <button class="btn-capture" onclick="submitCapture()">Remind Me</button>
+      <div class="success-msg" id="capture-success">✓ You'll be reminded before the deadline!</div>
+    </div>
+  </div>
+
+  <!-- AFFILIATE OFFERS -->
+  <div class="affiliate-section">
+    <div class="affiliate-title">📚 Resources to strengthen your application</div>
+    <div class="affiliate-grid">
+      <a href="#" class="affiliate-card" onclick="trackAff('ielts')">
+        <div class="aff-icon">📝</div>
+        <div class="aff-name">IELTS Preparation</div>
+        <div class="aff-desc">Most UK scholarships require IELTS 6.5+. Start prep today.</div>
+        <div class="aff-badge">⭐ Recommended</div>
+      </a>
+      <a href="#" class="affiliate-card" onclick="trackAff('essay')">
+        <div class="aff-icon">✍️</div>
+        <div class="aff-name">Essay Review Service</div>
+        <div class="aff-desc">Get your SOP and motivation letter reviewed by experts.</div>
+        <div class="aff-badge">💬 Popular with applicants</div>
+      </a>
+      <a href="#" class="affiliate-card" onclick="trackAff('duolingo')">
+        <div class="aff-icon">🌐</div>
+        <div class="aff-name">Duolingo English Test</div>
+        <div class="aff-desc">Accepted alternative to IELTS. Cheaper & faster results.</div>
+        <div class="aff-badge">✅ Chevening accepted</div>
+      </a>
+    </div>
+  </div>
+
+  <!-- MORE SCHOLARSHIPS -->
+  <div class="more-section">
+    <div class="more-title">More scholarships you might like</div>
+    <div class="more-grid">
+      <a href="/s/gates-cambridge-26" class="more-card">
+        <div class="more-flag">🇬🇧</div>
+        <div class="more-info">
+          <div class="more-name">Gates Cambridge Scholarship 2026</div>
+          <div class="more-meta">Full Funding · Masters/PhD · Deadline Oct 12</div>
+        </div>
+      </a>
+      <a href="/s/commonwealth-26" class="more-card">
+        <div class="more-flag">🌍</div>
+        <div class="more-info">
+          <div class="more-name">Commonwealth Masters 2026</div>
+          <div class="more-meta">Full Funding · Masters · Deadline Dec 15</div>
+        </div>
+      </a>
+      <a href="/s/daad-germany-26" class="more-card">
+        <div class="more-flag">🇩🇪</div>
+        <div class="more-info">
+          <div class="more-name">DAAD Germany Scholarship</div>
+          <div class="more-meta">Full Funding · All Levels · Deadline Dec 1</div>
+        </div>
+      </a>
+      <a href="/s/fulbright-26" class="more-card">
+        <div class="more-flag">🇺🇸</div>
+        <div class="more-info">
+          <div class="more-name">Fulbright Scholarship USA 2026</div>
+          <div class="more-meta">Full Funding · Masters/PhD · Deadline Oct 1</div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<div class="page-footer">
+  <p>© 2026 <a href="/">ScholarBroad</a> · Daily scholarship opportunities on WhatsApp · <a href="/join">Join our group free</a></p>
+  <p style="margin-top:6px">Built by <a href="https://suntrenia.com">Suntrenia</a></p>
+</div>
+
+<script>
+  // ---- DATA HYDRATION FROM URL PARAMS (for dynamic use) ----
+  // In production, your server renders this page with real data.
+  // For preview/demo, we read from URL params: ?title=...&deadline=...&country=...
+  function getParam(key) {
+    return new URLSearchParams(window.location.search).get(key);
+  }
+
+  function hydrate() {
+    const title = getParam('title') || 'Chevening Scholarship 2026 — United Kingdom';
+    const flag = getParam('flag') || '🇬🇧';
+    const deadline = getParam('deadline') || 'November 5, 2026';
+    const host = getParam('host') || '🇬🇧 United Kingdom';
+    const level = getParam('level') || 'Masters (1 year)';
+    const funding = getParam('funding') || 'Full — Tuition + Living';
+    const eligible = getParam('eligible') || '160+ Countries';
+    const field = getParam('field') || 'All Fields';
+    const url = getParam('url') || '#';
+    const desc = getParam('desc') || document.getElementById('s-desc').textContent;
+
+    document.getElementById('page-title').textContent = title + ' — ScholarBroad';
+    document.getElementById('og-title').content = title;
+    document.getElementById('s-flag').textContent = flag;
+    document.getElementById('s-title').textContent = title;
+    document.getElementById('s-host').textContent = host;
+    document.getElementById('s-level').textContent = level;
+    document.getElementById('s-fund-detail').textContent = funding;
+    document.getElementById('s-deadline').textContent = deadline;
+    document.getElementById('s-eligible').textContent = eligible;
+    document.getElementById('s-field').textContent = field;
+    document.getElementById('official-link').href = url;
+    document.getElementById('s-desc').textContent = desc;
+    document.getElementById('urgency-text').textContent = `Application closes ${deadline}`;
+    document.getElementById('breadcrumb-title').textContent = title.split('—')[0].trim();
+
+    // Days left calculation
+    const deadlineDate = new Date(deadline);
+    const today = new Date();
+    const diff = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
+    if (!isNaN(diff)) {
+      const el = document.getElementById('days-left');
+      el.innerHTML = `${diff > 0 ? diff : 'Closed'}<small>days left</small>`;
+      if (diff < 30) el.style.color = 'var(--danger)';
+      else if (diff < 60) el.style.color = 'var(--gold)';
+      else el.style.color = 'var(--accent)';
+    }
+  }
+
+  function trackClick() {
+    // Send analytics event to your backend
+    fetch('/api/track-click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: window.location.pathname.split('/s/')[1], type: 'official_link' })
+    }).catch(() => {});
+  }
+
+  function trackAff(name) {
+    fetch('/api/track-click', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: window.location.pathname.split('/s/')[1], type: 'affiliate_' + name })
+    }).catch(() => {});
+  }
+
+  function shareThis() {
+    const title = document.getElementById('s-title').textContent;
+    const url = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title, text: `Check out this scholarship on ScholarBroad: ${title}`, url });
+    } else {
+      navigator.clipboard.writeText(url);
+      alert('Link copied to clipboard!');
+    }
+  }
+
+  function saveScholarship() {
+    const btn = document.getElementById('save-btn-text');
+    btn.textContent = btn.textContent === 'Save' ? '✓ Saved' : 'Save';
+    // In production: POST /api/user/saved-scholarships
+  }
+
+  function submitCapture() {
+    const email = document.getElementById('capture-email').value.trim();
+    if (!email || !email.includes('@')) { alert('Please enter a valid email.'); return; }
+    // In production: POST /api/reminders with email + slug + deadline
+    fetch('/api/reminders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        slug: window.location.pathname.split('/s/')[1],
+        deadline: document.getElementById('s-deadline').textContent
+      })
+    }).catch(() => {});
+    document.getElementById('capture-success').style.display = 'block';
+    document.getElementById('capture-email').style.display = 'none';
+    document.querySelector('.btn-capture').style.display = 'none';
+  }
+
+  hydrate();
+</script>
+</body>
+</html>

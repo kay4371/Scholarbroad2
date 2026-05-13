@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ScholarBroad — We Apply. You Study.</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --ink:       #100f0d;
+      --paper:     #f7f2e9;
+      --cream:     #fbf8f2;
+      --warm:      #f0e9d8;
+      --gold:      #b87c0a;
+      --gold-lt:   #e8b94a;
+      --gold-pale: rgba(232,185,74,0.12);
+      --sage:      #2c4f41;
+      --sage-lt:   #456e5a;
+      --muted:     #7b7265;
+      --border:    rgba(16,15,13,0.09);
+      --sh:        0 2px 24px rgba(16,15,13,0.06);
+      --sh-lg:     0 12px 48px rgba(16,15,13,0.11);
+    }
+
+    *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      overflow-x: hidden;
+    }
+
+    /* ── GRAIN ── */
+    body::before {
+      content:''; position:fixed; inset:0; pointer-events:none; z-index:9000;
+      opacity:0.38;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23g)' opacity='0.04'/%3E%3C/svg%3E");
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      background: var(--ink);
+      padding: 0.48rem 0;
+      text-align: center;
+      font-size: 0.68rem;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: rgba(247,242,233,0.45);
+      display: flex; align-items: center; justify-content: center; gap: 0.8rem;
+    }
+    .topbar strong { color: rgba(247,242,233,0.8); font-weight:500; }
+    .tb-sep { width:3px; height:3px; border-radius:50%; background:var(--gold-lt); opacity:0.5; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 500;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 4rem;
+      height: 64px;
+      background: rgba(247,242,233,0.94);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 700; font-size: 1.5rem;
+      letter-spacing: -0.01em; color: var(--ink);
+      text-decoration: none;
+    }
+    .logo-dot { color: var(--gold); }
+    .nav-links { display:flex; gap:2rem; }
+    .nav-links a {
+      font-size: 0.84rem; font-weight:400;
+      color: var(--muted); text-decoration:none;
+      transition: color .2s;
+    }
+    .nav-links a:hover { color: var(--ink); }
+    .nav-actions { display:flex; gap:0.7rem; align-items:center; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items:center; gap:0.4rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.84rem; font-weight:500;
+      padding: 0.55rem 1.25rem; border-radius:6px;
+      text-decoration: none; border: none; cursor: pointer;
+      transition: all .2s;
+    }
+    .btn-sm { padding: 0.45rem 1rem; font-size: 0.8rem; }
+    .btn-muted  { background:transparent; color:var(--muted); }
+    .btn-muted:hover { color: var(--ink); }
+    .btn-ink    { background:var(--ink); color:var(--paper); }
+    .btn-ink:hover { background:var(--sage); transform:translateY(-1px); box-shadow:0 4px 14px rgba(44,79,65,.28); }
+    .btn-gold   { background:var(--gold); color:#fff; font-size:0.95rem; padding:0.8rem 2.1rem; border-radius:7px; }
+    .btn-gold:hover { background:#9e6b08; transform:translateY(-2px); box-shadow:0 8px 28px rgba(184,124,10,.32); }
+    .btn-outline { background:transparent; color:var(--muted); border:1.5px solid var(--border); }
+    .btn-outline:hover { border-color:rgba(16,15,13,0.3); color:var(--ink); }
+    .btn-ghost-light { background:transparent; color:rgba(247,242,233,0.7); border:1.5px solid rgba(247,242,233,0.18); font-size:0.95rem; padding:0.8rem 2.1rem; border-radius:7px; }
+    .btn-ghost-light:hover { background:rgba(247,242,233,0.07); color:rgba(247,242,233,0.95); border-color:rgba(247,242,233,0.35); }
+
+    /* ════════════════════════════════════
+       HERO — gradient fade, no hard split
+       ════════════════════════════════════ */
+    .hero {
+      position: relative;
+      min-height: calc(100vh - 88px);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+    }
+
+    /* Soft radial warm-to-dark gradient across the whole hero */
+    .hero-bg {
+      position: absolute; inset: 0; z-index: 0;
+      background:
+        radial-gradient(ellipse 55% 90% at 0% 50%,  var(--paper) 0%, transparent 100%),
+        radial-gradient(ellipse 80% 100% at 100% 50%, #0d0c0a 0%, #1a1814 60%, transparent 100%),
+        var(--paper);
+    }
+    /* Extra glow blobs */
+    .hero-bg::before {
+      content:''; position:absolute; inset:0;
+      background:
+        radial-gradient(ellipse 40% 50% at 30% 60%, rgba(184,124,10,0.07) 0%, transparent 70%),
+        radial-gradient(ellipse 30% 40% at 75% 20%, rgba(44,79,65,0.18) 0%, transparent 70%);
+    }
+
+    .hero-left {
+      position: relative; z-index: 2;
+      padding: 6rem 3rem 6rem 4rem;
+      display: flex; flex-direction:column; justify-content:center;
+    }
+
+    .eyebrow {
+      display: inline-flex; align-items:center; gap:0.5rem;
+      padding: 0.3rem 0.85rem; border-radius:100px;
+      background: rgba(44,79,65,0.09);
+      border: 1px solid rgba(44,79,65,0.18);
+      color: var(--sage);
+      font-size: 0.69rem; font-weight:500;
+      letter-spacing:0.09em; text-transform:uppercase;
+      margin-bottom: 1.8rem; width:fit-content;
+      animation: up 0.6s 0.05s both;
+    }
+    .eyebrow-dot { width:5px; height:5px; border-radius:50%; background:var(--sage-lt); }
+
+    .hero h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(3.4rem, 5.8vw, 5.6rem);
+      font-weight: 700;
+      line-height: 1.0;
+      letter-spacing: -0.025em;
+      color: var(--ink);
+      margin-bottom: 1.6rem;
+      animation: up 0.6s 0.12s both;
+    }
+    .hero h1 .italic {
+      font-style: italic; font-weight:300;
+      color: var(--sage);
+    }
+    .hero h1 .ruled {
+      position: relative; display:inline-block;
+    }
+    .hero h1 .ruled::after {
+      content:''; position:absolute; left:0; bottom:3px; right:0; height:2.5px;
+      background: var(--gold); border-radius:2px;
+      transform: scaleX(0); transform-origin:left;
+      animation: rulein 0.7s 0.9s ease forwards;
+    }
+
+    .hero-body {
+      font-size: 1.05rem; line-height: 1.78;
+      color: var(--muted); max-width:460px;
+      margin-bottom: 2.4rem;
+      animation: up 0.6s 0.22s both;
+    }
+    .hero-body strong { color: var(--ink); font-weight:500; }
+
+    .hero-cta {
+      display: flex; gap: 1rem; align-items:center;
+      animation: up 0.6s 0.32s both;
+      flex-wrap: wrap;
+    }
+
+    .social-proof {
+      margin-top: 2rem;
+      display: flex; align-items:center; gap:1rem;
+      animation: up 0.6s 0.42s both;
+    }
+    .faces { display:flex; }
+    .face {
+      width: 32px; height:32px; border-radius:50%;
+      border: 2.5px solid var(--paper);
+      display:flex; align-items:center; justify-content:center;
+      font-size: 0.7rem; font-weight:700; color:#fff;
+    }
+    .face+.face { margin-left:-10px; }
+    .f1{background:var(--sage);} .f2{background:var(--gold);} .f3{background:#9b4b2e;} .f4{background:#4a6a8a;}
+    .proof-text { font-size:0.77rem; color:var(--muted); }
+    .proof-text strong { color:var(--ink); }
+
+    /* Hero right — lives inside gradient dark zone */
+    .hero-right {
+      position: relative; z-index: 2;
+      padding: 6rem 4rem 6rem 4.5rem;
+      display: flex; flex-direction:column; justify-content:center;
+    }
+
+    .panel-eyebrow {
+      font-size: 0.66rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase;
+      color: rgba(232,185,74,0.55); margin-bottom:2rem;
+      animation: up 0.6s 0.4s both;
+    }
+
+    /* Steps list */
+    .steps-list { list-style:none; }
+    .step-row {
+      display: flex; gap:1rem;
+      animation: up 0.55s both;
+    }
+    .step-row:nth-child(1) { animation-delay:.45s; }
+    .step-row:nth-child(2) { animation-delay:.55s; }
+    .step-row:nth-child(3) { animation-delay:.65s; }
+    .step-row:nth-child(4) { animation-delay:.75s; }
+    .step-row:nth-child(5) { animation-delay:.85s; }
+
+    .step-spine {
+      display:flex; flex-direction:column; align-items:center;
+      flex-shrink:0; width:30px;
+    }
+    .step-circle {
+      width:30px; height:30px; border-radius:50%;
+      border: 1.5px solid rgba(232,185,74,.3);
+      color: rgba(232,185,74,.75);
+      font-family:'Cormorant Garamond',serif;
+      font-size:0.85rem; font-weight:600;
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0;
+    }
+    .step-vline {
+      flex:1; width:1px; min-height:18px;
+      background: linear-gradient(to bottom, rgba(232,185,74,.18), transparent);
+      margin: 4px 0;
+    }
+    .step-content { padding-bottom:1.5rem; }
+    .step-content h4 {
+      font-size:0.88rem; font-weight:500;
+      color:rgba(247,242,233,.88);
+      margin-bottom:0.18rem; line-height:1.3;
+    }
+    .step-content p {
+      font-size:0.76rem; line-height:1.55;
+      color:rgba(247,242,233,.36);
+    }
+
+    /* ── MARQUEE ── */
+    .marquee-band {
+      background:var(--sage); padding:0.88rem 0; overflow:hidden;
+    }
+    .marquee-inner {
+      display:flex; gap:3.5rem; white-space:nowrap;
+      animation: scroll 32s linear infinite;
+    }
+    .m-item {
+      display:flex; align-items:center; gap:0.6rem; flex-shrink:0;
+      font-size:0.73rem; font-weight:400; letter-spacing:0.06em; text-transform:uppercase;
+      color:rgba(247,242,233,.6);
+    }
+    .m-item .diamond { color:var(--gold-lt); font-size:0.45rem; }
+
+    /* ── SECTIONS ── */
+    .sec { padding:7rem 4rem; }
+    .sec-sm { padding:5rem 4rem; }
+    .sec-label {
+      font-size:0.67rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase;
+      color:var(--sage); margin-bottom:0.75rem;
+    }
+    .sec-title {
+      font-family:'Cormorant Garamond',serif;
+      font-size:clamp(2.2rem,3.5vw,3.3rem);
+      font-weight:700; letter-spacing:-0.02em; line-height:1.08;
+      max-width:600px; margin-bottom:0.9rem;
+    }
+    .sec-body {
+      font-size:1rem; color:var(--muted);
+      max-width:520px; line-height:1.75; margin-bottom:4rem;
+    }
+
+    /* ── HOW IT WORKS — elegant timeline ── */
+    .timeline {
+      display:grid; grid-template-columns:repeat(5,1fr);
+      position:relative; gap:0;
+    }
+    .timeline::before {
+      content:''; position:absolute;
+      top:26px; left:calc(10% + 1px); right:calc(10% + 1px); height:1px;
+      background:linear-gradient(90deg, transparent, var(--border) 15%, var(--border) 85%, transparent);
+    }
+    .tl-step {
+      padding:0 1rem;
+      display:flex; flex-direction:column; align-items:center; text-align:center;
+      transition: transform .22s;
+    }
+    .tl-step:hover { transform:translateY(-6px); }
+    .tl-bubble {
+      width:52px; height:52px; border-radius:50%;
+      background:var(--cream); border:1.5px solid var(--border);
+      display:flex; align-items:center; justify-content:center;
+      font-family:'Cormorant Garamond',serif;
+      font-size:1.15rem; font-weight:700; color:var(--ink);
+      margin-bottom:1.4rem; position:relative; z-index:1;
+      box-shadow:var(--sh);
+      transition: all .22s;
+    }
+    .tl-step:hover .tl-bubble { background:var(--sage); color:var(--paper); border-color:var(--sage); box-shadow:0 6px 22px rgba(44,79,65,.3); }
+    .tl-step h3 {
+      font-family:'Cormorant Garamond',serif;
+      font-size:1rem; font-weight:600; margin-bottom:0.45rem; line-height:1.2;
+    }
+    .tl-step p { font-size:0.77rem; color:var(--muted); line-height:1.55; }
+    .tl-emoji { font-size:1.1rem; margin-bottom:0.55rem; }
+
+    /* ── DARK FEATURES ── */
+    .dark-sec {
+      background:var(--ink);
+      padding:7rem 4rem;
+      position:relative; overflow:hidden;
+    }
+    /* Ambient glows */
+    .dark-sec::before {
+      content:''; position:absolute; pointer-events:none;
+      width:700px; height:700px; border-radius:50%;
+      background:radial-gradient(circle, rgba(44,79,65,.3) 0%, transparent 70%);
+      top:-250px; right:-150px;
+    }
+    .dark-sec::after {
+      content:''; position:absolute; pointer-events:none;
+      width:500px; height:500px; border-radius:50%;
+      background:radial-gradient(circle, rgba(184,124,10,.12) 0%, transparent 70%);
+      bottom:-150px; left:-100px;
+    }
+    .dark-sec .sec-label { color:rgba(232,185,74,.6); }
+    .dark-sec .sec-title { color:var(--paper); }
+    .dark-sec .sec-body  { color:rgba(247,242,233,.42); }
+
+    .feat-grid {
+      display:grid; grid-template-columns:repeat(3,1fr);
+      border-radius:18px; overflow:hidden;
+      border:1px solid rgba(247,242,233,.05);
+      gap:1px; background:rgba(247,242,233,.04);
+      position:relative; z-index:1;
+    }
+    .feat-card {
+      padding:2.5rem 2rem;
+      background:#0f0e0c;
+      transition: background .22s;
+      position:relative;
+    }
+    .feat-card:hover { background:rgba(44,79,65,.16); }
+    .feat-bg-num {
+      position:absolute; top:1.2rem; right:1.5rem;
+      font-family:'Cormorant Garamond',serif;
+      font-size:4.5rem; font-weight:700;
+      color:rgba(247,242,233,.025); line-height:1; user-select:none;
+    }
+    .feat-icon { font-size:1.6rem; margin-bottom:1.1rem; display:block; }
+    .feat-card h3 {
+      font-family:'Cormorant Garamond',serif;
+      font-size:1.1rem; font-weight:600; color:var(--paper); margin-bottom:0.55rem;
+    }
+    .feat-card p { font-size:0.8rem; color:rgba(247,242,233,.38); line-height:1.65; }
+    .feat-badge {
+      display:inline-block; margin-top:1.2rem;
+      font-size:0.62rem; font-weight:500; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gold-lt); opacity:0.65;
+    }
+
+    /* ── PROOF / TESTIMONIALS ── */
+    .proof-sec { padding:7rem 4rem; background:var(--cream); }
+    .proof-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; }
+    .proof-card {
+      background:var(--paper); border:1px solid var(--border);
+      border-radius:14px; padding:2.2rem 1.8rem;
+      box-shadow:var(--sh);
+      transition: transform .22s, box-shadow .22s;
+    }
+    .proof-card:hover { transform:translateY(-5px); box-shadow:var(--sh-lg); }
+    .open-quote {
+      font-family:'Cormorant Garamond',serif;
+      font-size:3.5rem; font-weight:300; line-height:.8;
+      color:var(--gold); display:block; margin-bottom:0.6rem;
+    }
+    .proof-text-body {
+      font-family:'Cormorant Garamond',serif;
+      font-size:1.1rem; font-style:italic; font-weight:400;
+      line-height:1.68; color:var(--ink); margin-bottom:1.5rem;
+    }
+    .proof-person { display:flex; align-items:center; gap:0.75rem; }
+    .p-avatar {
+      width:36px; height:36px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:0.78rem; font-weight:700; color:#fff;
+    }
+    .p-name { font-size:0.83rem; font-weight:500; }
+    .p-meta { font-size:0.72rem; color:var(--muted); margin-top:0.1rem; }
+
+    /* ── STATS ── */
+    .stats-band {
+      background:var(--warm); border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+      padding:3.5rem 4rem;
+      display:grid; grid-template-columns:repeat(4,1fr);
+      gap:2rem;
+    }
+    .stat { text-align:center; }
+    .stat-val {
+      font-family:'Cormorant Garamond',serif;
+      font-size:3rem; font-weight:700; letter-spacing:-0.03em;
+      color:var(--ink); display:block; line-height:1;
+    }
+    .stat-val span { color:var(--gold); }
+    .stat-lbl { font-size:0.78rem; color:var(--muted); margin-top:0.4rem; letter-spacing:0.03em; }
+
+    /* ── PLANS ── */
+    .plans-sec { padding:7rem 4rem; }
+    .plans-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem; }
+
+    .plan {
+      border:1.5px solid var(--border); border-radius:16px;
+      padding:2.5rem 2rem; background:var(--cream);
+      position:relative;
+      transition: transform .22s, box-shadow .22s;
+    }
+    .plan:hover { transform:translateY(-5px); box-shadow:var(--sh-lg); }
+    .plan.hero-plan { background:var(--ink); border-color:var(--ink); }
+
+    .plan-badge {
+      position:absolute; top:-13px; left:50%; transform:translateX(-50%);
+      background:var(--gold); color:#fff;
+      font-size:0.62rem; font-weight:600; letter-spacing:0.09em; text-transform:uppercase;
+      padding:0.25rem 0.85rem; border-radius:100px;
+    }
+    .plan-name {
+      font-family:'Cormorant Garamond',serif;
+      font-size:1.4rem; font-weight:700; letter-spacing:-0.01em;
+      color:var(--ink); margin-bottom:0.25rem;
+    }
+    .plan.hero-plan .plan-name { color:var(--paper); }
+    .plan-price {
+      font-family:'Cormorant Garamond',serif;
+      font-size:2.8rem; font-weight:700; letter-spacing:-0.04em; line-height:1;
+      color:var(--ink); margin-bottom:0.2rem;
+    }
+    .plan.hero-plan .plan-price { color:var(--gold-lt); }
+    .plan-period { font-size:0.78rem; color:var(--muted); margin-bottom:1.6rem; }
+    .plan.hero-plan .plan-period { color:rgba(247,242,233,.4); }
+
+    .plan-perks { list-style:none; display:flex; flex-direction:column; gap:0.6rem; margin-bottom:2rem; }
+    .plan-perk {
+      display:flex; align-items:flex-start; gap:0.5rem;
+      font-size:0.8rem; color:var(--muted); line-height:1.45;
+    }
+    .plan-perk::before { content:'✓'; color:var(--sage-lt); font-weight:700; min-width:14px; flex-shrink:0; }
+    .plan.hero-plan .plan-perk { color:rgba(247,242,233,.58); }
+    .plan.hero-plan .plan-perk::before { color:var(--gold-lt); }
+
+    .plan-cta {
+      display:block; text-align:center; padding:0.78rem; border-radius:7px;
+      font-family:'DM Sans',sans-serif; font-weight:500; font-size:0.86rem;
+      text-decoration:none; border:none; cursor:pointer; transition:all .18s;
+    }
+    .p-cta-ink    { background:var(--ink); color:var(--paper); }
+    .p-cta-ink:hover { background:var(--sage); }
+    .p-cta-gold   { background:var(--gold); color:#fff; }
+    .p-cta-gold:hover { background:#9e6b08; }
+    .p-cta-ghost  { background:transparent; color:rgba(247,242,233,.8); border:1.5px solid rgba(247,242,233,.2); }
+    .p-cta-ghost:hover { background:rgba(247,242,233,.08); }
+
+    /* ── FINAL CTA ── */
+    .cta-sec {
+      padding:9rem 4rem; text-align:center;
+      background:var(--ink); position:relative; overflow:hidden;
+    }
+    .cta-sec::before {
+      content:''; position:absolute; inset:0; pointer-events:none;
+      background:radial-gradient(ellipse 70% 60% at 50% 50%, rgba(44,79,65,.35) 0%, transparent 70%);
+    }
+    .cta-label { font-size:0.67rem; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:rgba(232,185,74,.6); margin-bottom:1rem; }
+    .cta-title {
+      font-family:'Cormorant Garamond',serif;
+      font-size:clamp(2.8rem,5.5vw,5rem);
+      font-weight:700; letter-spacing:-0.03em; line-height:1.0;
+      color:var(--paper); max-width:680px; margin:0 auto 0.9rem;
+      position:relative; z-index:1;
+    }
+    .cta-title em { font-style:italic; font-weight:300; color:var(--gold-lt); }
+    .cta-body {
+      font-size:1rem; color:rgba(247,242,233,.42);
+      max-width:460px; margin:0 auto 2.8rem; line-height:1.75;
+      position:relative; z-index:1;
+    }
+    .cta-btns { display:flex; gap:1rem; justify-content:center; position:relative; z-index:1; flex-wrap:wrap; }
+
+    /* ── FOOTER ── */
+    footer {
+      background:#09080700;
+      background: #0c0b09;
+      border-top:1px solid rgba(247,242,233,.04);
+      padding:2.8rem 4rem;
+    }
+    .foot-inner {
+      display:flex; justify-content:space-between; align-items:center;
+      flex-wrap:wrap; gap:1.5rem;
+    }
+    .foot-brand {
+      font-family:'Cormorant Garamond',serif;
+      font-weight:700; font-size:1.2rem; letter-spacing:-0.01em;
+      color:rgba(247,242,233,.6);
+    }
+    .foot-brand span { color:var(--gold); }
+    .foot-by {
+      font-size:0.64rem; font-weight:400; letter-spacing:0.07em; text-transform:uppercase;
+      color:rgba(247,242,233,.22); margin-top:0.22rem;
+    }
+    .foot-links { display:flex; gap:2rem; flex-wrap:wrap; }
+    .foot-links a { font-size:0.78rem; color:rgba(247,242,233,.27); text-decoration:none; transition:color .18s; }
+    .foot-links a:hover { color:rgba(247,242,233,.65); }
+    .foot-copy {
+      margin-top:1.8rem; padding-top:1.5rem;
+      border-top:1px solid rgba(247,242,233,.04);
+      text-align:center; font-size:0.7rem; color:rgba(247,242,233,.16);
+    }
+
+    /* ── KEYFRAMES ── */
+    @keyframes up {
+      from { opacity:0; transform:translateY(20px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    @keyframes rulein { to { transform:scaleX(1); } }
+    @keyframes scroll {
+      from { transform:translateX(0); }
+      to   { transform:translateX(-50%); }
+    }
+
+    /* ── RESPONSIVE ── */
+    @media(max-width:1100px){
+      .timeline { grid-template-columns:repeat(3,1fr); gap:2rem; }
+      .timeline::before { display:none; }
+      .feat-grid { grid-template-columns:1fr 1fr; }
+      .plans-grid { grid-template-columns:1fr; max-width:440px; }
+    }
+    @media(max-width:780px){
+      nav { padding:0 1.5rem; }
+      .nav-links { display:none; }
+      .hero { grid-template-columns:1fr; min-height:auto; }
+      .hero-bg { background: radial-gradient(ellipse 120% 60% at 50% 0%, var(--paper) 0%, #1a1814 100%); }
+      .hero-left { padding:4.5rem 1.5rem 3rem; }
+      .hero-right { display:none; }
+      .sec,.sec-sm,.dark-sec,.proof-sec,.plans-sec,.cta-sec { padding:4.5rem 1.5rem; }
+      .timeline { grid-template-columns:1fr 1fr; }
+      .feat-grid { grid-template-columns:1fr; }
+      .proof-grid { grid-template-columns:1fr; }
+      .stats-band { grid-template-columns:1fr 1fr; padding:2.5rem 1.5rem; }
+      .plans-grid { max-width:100%; }
+      footer { padding:2rem 1.5rem; }
+      .foot-inner { flex-direction:column; align-items:flex-start; }
+      .topbar { font-size:0.6rem; gap:0.55rem; padding:0.45rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <span class="tb-sep"></span>
+    Powered by <strong>Suntrenia</strong>
+    <span class="tb-sep"></span>
+    A Suntrenia Product
+    <span class="tb-sep"></span>
+  </div>
+
+  <!-- NAV -->
+  <nav>
+    <a href="/" class="logo">Scholar<span class="logo-dot">·</span>Broad</a>
+    <div class="nav-links">
+      <a href="/subscribe">Scholarships</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="/dashboard">Dashboard</a>
+    </div>
+    <div class="nav-actions">
+      <a href="/dashboard" class="btn btn-muted btn-sm">Log in</a>
+      <a href="/subscribe" class="btn btn-ink btn-sm">Get started →</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-bg"></div>
+
+    <!-- LEFT -->
+    <div class="hero-left">
+      <div class="eyebrow">
+        <span class="eyebrow-dot"></span>
+        Full-service scholarship management
+      </div>
+
+      <h1>
+        We handle<br>
+        <span class="italic">every part</span><br>
+        of your <span class="ruled">application.</span>
+      </h1>
+
+      <p class="hero-body">
+        From <strong>finding scholarships</strong> to writing your essays, reaching out on your behalf, and hitting submit — ScholarBroad does the entire application work for you. <strong>You review. We execute.</strong>
+      </p>
+
+      <div class="hero-cta">
+        <a href="/subscribe" class="btn btn-gold">Start my application</a>
+        <a href="#how-it-works" class="btn btn-outline">See how it works ↓</a>
+      </div>
+
+      <div class="social-proof">
+        <div class="faces">
+          <div class="face f1">A</div>
+          <div class="face f2">K</div>
+          <div class="face f3">O</div>
+          <div class="face f4">M</div>
+        </div>
+        <div class="proof-text"><strong>400+ students</strong> accepted to universities worldwide</div>
+      </div>
+    </div>
+
+    <!-- RIGHT — inside gradient dark zone -->
+    <div class="hero-right">
+      <div class="panel-eyebrow">What we do on your behalf</div>
+      <ul class="steps-list">
+        <li class="step-row">
+          <div class="step-spine"><div class="step-circle">1</div><div class="step-vline"></div></div>
+          <div class="step-content">
+            <h4>We search for scholarships daily</h4>
+            <p>We monitor hundreds of sources across 40+ countries, matched to your degree level, field, and eligibility.</p>
+          </div>
+        </li>
+        <li class="step-row">
+          <div class="step-spine"><div class="step-circle">2</div><div class="step-vline"></div></div>
+          <div class="step-content">
+            <h4>We write your entire application</h4>
+            <p>Personal statements, cover letters, motivation letters — fully drafted and tailored to each programme.</p>
+          </div>
+        </li>
+        <li class="step-row">
+          <div class="step-spine"><div class="step-circle">3</div><div class="step-vline"></div></div>
+          <div class="step-content">
+            <h4>We reach out to universities</h4>
+            <p>For programmes that need it — we contact admissions offices, supervisors, or departments on your behalf.</p>
+          </div>
+        </li>
+        <li class="step-row">
+          <div class="step-spine"><div class="step-circle">4</div><div class="step-vline"></div></div>
+          <div class="step-content">
+            <h4>You approve — we submit</h4>
+            <p>Review everything in your queue. One click to approve. We handle submission, follow-ups, and tracking.</p>
+          </div>
+        </li>
+        <li class="step-row">
+          <div class="step-spine"><div class="step-circle">5</div></div>
+          <div class="step-content">
+            <h4>You receive your offer letter</h4>
+            <p>We stay on top of responses until you get that acceptance — for Undergraduate, Masters, or PhD.</p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- MARQUEE -->
+  <div class="marquee-band" aria-hidden="true">
+    <div class="marquee-inner">
+      <span class="m-item"><span class="diamond">◆</span> Scholarship Search</span>
+      <span class="m-item"><span class="diamond">◆</span> Application Writing</span>
+      <span class="m-item"><span class="diamond">◆</span> University Outreach</span>
+      <span class="m-item"><span class="diamond">◆</span> Cover Letters</span>
+      <span class="m-item"><span class="diamond">◆</span> Personal Statements</span>
+      <span class="m-item"><span class="diamond">◆</span> Research Proposals</span>
+      <span class="m-item"><span class="diamond">◆</span> Deadline Tracking</span>
+      <span class="m-item"><span class="diamond">◆</span> Follow-up Emails</span>
+      <span class="m-item"><span class="diamond">◆</span> Undergraduate · Masters · PhD</span>
+      <span class="m-item"><span class="diamond">◆</span> 40+ Countries</span>
+      <!-- duplicate for seamless loop -->
+      <span class="m-item"><span class="diamond">◆</span> Scholarship Search</span>
+      <span class="m-item"><span class="diamond">◆</span> Application Writing</span>
+      <span class="m-item"><span class="diamond">◆</span> University Outreach</span>
+      <span class="m-item"><span class="diamond">◆</span> Cover Letters</span>
+      <span class="m-item"><span class="diamond">◆</span> Personal Statements</span>
+      <span class="m-item"><span class="diamond">◆</span> Research Proposals</span>
+      <span class="m-item"><span class="diamond">◆</span> Deadline Tracking</span>
+      <span class="m-item"><span class="diamond">◆</span> Follow-up Emails</span>
+      <span class="m-item"><span class="diamond">◆</span> Undergraduate · Masters · PhD</span>
+      <span class="m-item"><span class="diamond">◆</span> 40+ Countries</span>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <section class="sec" id="how-it-works">
+    <div class="sec-label">The process</div>
+    <h2 class="sec-title">One profile. We handle the entire journey.</h2>
+    <p class="sec-body">Tell us your goals once. ScholarBroad finds scholarships, writes your applications, reaches out on your behalf, and submits — for any degree level, any country.</p>
+
+    <div class="timeline">
+      <div class="tl-step">
+        <div class="tl-bubble">01</div>
+        <div class="tl-emoji">🎯</div>
+        <h3>You set your goals</h3>
+        <p>Share your degree level, field, target country, and upload your CV. Five minutes, once.</p>
+      </div>
+      <div class="tl-step">
+        <div class="tl-bubble">02</div>
+        <div class="tl-emoji">🔍</div>
+        <h3>We find your scholarships</h3>
+        <p>We scan 100+ sources daily across 40+ countries and surface every opportunity you qualify for.</p>
+      </div>
+      <div class="tl-step">
+        <div class="tl-bubble">03</div>
+        <div class="tl-emoji">✍️</div>
+        <h3>We write everything</h3>
+        <p>Cover letters, personal statements, motivation essays — fully written and tailored to each programme.</p>
+      </div>
+      <div class="tl-step">
+        <div class="tl-bubble">04</div>
+        <div class="tl-emoji">📬</div>
+        <h3>We reach out for you</h3>
+        <p>We contact universities, departments, or supervisors where required — personalised and professional.</p>
+      </div>
+      <div class="tl-step">
+        <div class="tl-bubble">05</div>
+        <div class="tl-emoji">🎓</div>
+        <h3>You get accepted</h3>
+        <p>Review in your dashboard, approve with one click, and we submit, track, and follow up until you win.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <div class="stats-band">
+    <div class="stat">
+      <span class="stat-val">500<span>+</span></span>
+      <div class="stat-lbl">Scholarships tracked</div>
+    </div>
+    <div class="stat">
+      <span class="stat-val">40<span>+</span></span>
+      <div class="stat-lbl">Countries covered</div>
+    </div>
+    <div class="stat">
+      <span class="stat-val">400<span>+</span></span>
+      <div class="stat-lbl">Students accepted</div>
+    </div>
+    <div class="stat">
+      <span class="stat-val">3<span>×</span></span>
+      <div class="stat-lbl">Degree levels served</div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section class="dark-sec">
+    <div class="sec-label">What's included</div>
+    <h2 class="sec-title">Every service. Done for you.</h2>
+    <p class="sec-body">We don't just show you scholarships — we do the entire application work on your behalf, for Undergraduate, Masters, and PhD.</p>
+
+    <div class="feat-grid">
+      <div class="feat-card">
+        <span class="feat-bg-num">01</span>
+        <span class="feat-icon">📡</span>
+        <h3>Daily Scholarship Discovery</h3>
+        <p>We monitor WhatsApp groups, university portals, and global scholarship databases every day. Matched opportunities appear in your dashboard automatically.</p>
+        <span class="feat-badge">Automated daily</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-bg-num">02</span>
+        <span class="feat-icon">✍️</span>
+        <h3>Full Application Writing</h3>
+        <p>Personal statements, motivation letters, essays — written by AI trained on successful applications and reviewed by you before anything is submitted.</p>
+        <span class="feat-badge">Done for you</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-bg-num">03</span>
+        <span class="feat-icon">📬</span>
+        <h3>University & Supervisor Outreach</h3>
+        <p>Where a programme requires it — we contact admissions teams, departments, or research supervisors with personalised emails, plus automated follow-ups.</p>
+        <span class="feat-badge">Hands-free</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-bg-num">04</span>
+        <span class="feat-icon">✅</span>
+        <h3>Your Approval Queue</h3>
+        <p>Every letter, email, and application passes through your personal queue first. You review and approve with one click. Nothing leaves without your sign-off.</p>
+        <span class="feat-badge">You stay in control</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-bg-num">05</span>
+        <span class="feat-icon">🔔</span>
+        <h3>WhatsApp Deadline Alerts</h3>
+        <p>New scholarships and approaching deadlines are pushed straight to your WhatsApp the moment they're found. No extra apps, no inbox to dig through.</p>
+        <span class="feat-badge">Instant push</span>
+      </div>
+      <div class="feat-card">
+        <span class="feat-bg-num">06</span>
+        <span class="feat-icon">📊</span>
+        <h3>Live Application Dashboard</h3>
+        <p>Track every scholarship found, application written, outreach sent, reply received, and deadline approaching — all in one clean, real-time dashboard.</p>
+        <span class="feat-badge">Full visibility</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROOF -->
+  <section class="proof-sec">
+    <div class="sec-label">Student results</div>
+    <h2 class="sec-title">Real students. Real acceptances.</h2>
+    <p class="sec-body">ScholarBroad has helped students across Africa and beyond land fully-funded places at top universities worldwide — at every degree level.</p>
+
+    <div class="proof-grid">
+      <div class="proof-card">
+        <span class="open-quote">"</span>
+        <p class="proof-text-body">I didn't write a single word of my application. ScholarBroad handled the personal statement, the cover letter, every email — I just approved them. I got an offer from TU Delft.</p>
+        <div class="proof-person">
+          <div class="p-avatar" style="background:var(--sage);">A</div>
+          <div>
+            <div class="p-name">Amara K.</div>
+            <div class="p-meta">MSc Environmental Engineering · Netherlands 🇳🇱</div>
+          </div>
+        </div>
+      </div>
+      <div class="proof-card">
+        <span class="open-quote">"</span>
+        <p class="proof-text-body">As an undergraduate, I had no idea how to write a scholarship application. ScholarBroad wrote everything for me — three weeks later I had a fully-funded offer.</p>
+        <div class="proof-person">
+          <div class="p-avatar" style="background:#4a6a8a;">T</div>
+          <div>
+            <div class="p-name">Tunde B.</div>
+            <div class="p-meta">BSc Computer Science · Canada 🇨🇦</div>
+          </div>
+        </div>
+      </div>
+      <div class="proof-card">
+        <span class="open-quote">"</span>
+        <p class="proof-text-body">I was overwhelmed just knowing where to start. ScholarBroad found the scholarship, wrote my motivation letter, and updated me on WhatsApp. I'm now on Chevening.</p>
+        <div class="proof-person">
+          <div class="p-avatar" style="background:#9b4b2e;">N</div>
+          <div>
+            <div class="p-name">Ngozi A.</div>
+            <div class="p-meta">MA International Relations · UK 🇬🇧</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="plans-sec" id="pricing">
+    <div class="sec-label">Pricing</div>
+    <h2 class="sec-title">Pick your plan. We do the work.</h2>
+    <p class="sec-body">Start free to browse scholarships. Upgrade when you're ready to let us write and submit your applications for you.</p>
+
+    <div class="plans-grid">
+      <div class="plan">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">₦0</div>
+        <div class="plan-period">forever</div>
+        <ul class="plan-perks">
+          <li class="plan-perk">Daily scholarship alerts via WhatsApp</li>
+          <li class="plan-perk">Browse 500+ opportunities</li>
+          <li class="plan-perk">Deadline reminders</li>
+          <li class="plan-perk">Basic profile matching</li>
+        </ul>
+        <a href="/subscribe" class="plan-cta p-cta-ink">Start free</a>
+      </div>
+
+      <div class="plan hero-plan">
+        <div class="plan-badge">Most popular</div>
+        <div class="plan-name">Scholar</div>
+        <div class="plan-price">₦15k</div>
+        <div class="plan-period">per month</div>
+        <ul class="plan-perks">
+          <li class="plan-perk">Everything in Free</li>
+          <li class="plan-perk">AI-written cover letters &amp; personal statements</li>
+          <li class="plan-perk">University &amp; department outreach</li>
+          <li class="plan-perk">Approval queue — you review before anything sends</li>
+          <li class="plan-perk">Full application tracking dashboard</li>
+          <li class="plan-perk">Automated follow-ups</li>
+        </ul>
+        <a href="/subscribe" class="plan-cta p-cta-gold">Start applying →</a>
+      </div>
+
+      <div class="plan">
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">₦35k</div>
+        <div class="plan-period">per month</div>
+        <ul class="plan-perks">
+          <li class="plan-perk">Everything in Scholar</li>
+          <li class="plan-perk">Research proposal writing (PhD)</li>
+          <li class="plan-perk">Supervisor outreach for research degrees</li>
+          <li class="plan-perk">Bulk-approve all applications at once</li>
+          <li class="plan-perk">Gmail integration for reply detection</li>
+          <li class="plan-perk">Priority support</li>
+        </ul>
+        <a href="/subscribe" class="plan-cta p-cta-ink">Go Pro →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FINAL CTA -->
+  <section class="cta-sec">
+    <div class="cta-label">Ready to study abroad?</div>
+    <h2 class="cta-title">You dream it.<br><em>We apply for it.</em></h2>
+    <p class="cta-body">Stop spending months on applications. ScholarBroad finds the scholarships, writes everything, reaches out on your behalf, and submits — you just confirm.</p>
+    <div class="cta-btns">
+      <a href="/subscribe" class="btn btn-gold">Start my application</a>
+      <a href="/dashboard" class="btn btn-ghost-light">View dashboard</a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="foot-inner">
+      <div>
+        <div class="foot-brand">Scholar<span>·</span>Broad</div>
+        <div class="foot-by">A product of Suntrenia &nbsp;·&nbsp; suntrenia.com</div>
+      </div>
+      <div class="foot-links">
+        <a href="/subscribe">Scholarships</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/admin">Admin</a>
+        <a href="#pricing">Pricing</a>
+        <a href="/api/health">Status</a>
+      </div>
+    </div>
+    <div class="foot-copy">© 2025 ScholarBroad by Suntrenia. All rights reserved.</div>
+  </footer>
+
+</body>
+</html>

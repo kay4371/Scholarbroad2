@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScholarBroad — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2236;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #f0f4ff;
+    --muted: #8892a4;
+    --accent: #00e5a0;
+    --accent2: #0095ff;
+    --accent3: #ff6b35;
+    --gold: #f5c518;
+    --danger: #ff4d6d;
+    --success: #00e5a0;
+    --warn: #ffbe0b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 240px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 100;
+  }
+  .logo {
+    padding: 24px 20px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-mark {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
+  .logo-sub { font-size: 11px; color: var(--muted); margin-top: 2px; letter-spacing: 1.5px; text-transform: uppercase; }
+  nav { padding: 16px 12px; flex: 1; overflow-y: auto; }
+  .nav-section { font-size: 10px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; padding: 12px 8px 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 8px;
+    color: var(--muted); cursor: pointer;
+    transition: all 0.15s; font-size: 13.5px;
+    margin-bottom: 2px; font-weight: 400;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: rgba(0,229,160,0.1); color: var(--accent); font-weight: 500; }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .badge {
+    margin-left: auto; background: var(--accent); color: #000;
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+  }
+  .badge.warn { background: var(--warn); }
+  .sidebar-footer {
+    padding: 16px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px; color: #000; flex-shrink: 0;
+  }
+  .avatar-info .name { font-weight: 500; font-size: 13px; }
+  .avatar-info .role { font-size: 11px; color: var(--muted); }
+
+  /* MAIN */
+  .main { margin-left: 240px; flex: 1; display: flex; flex-direction: column; }
+  .topbar {
+    height: 60px; background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 28px; gap: 16px; position: sticky; top: 0; z-index: 50;
+  }
+  .topbar-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 17px; flex: 1; }
+  .topbar-actions { display: flex; gap: 10px; align-items: center; }
+  .btn {
+    padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    display: inline-flex; align-items: center; gap: 7px; transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #00c88a; transform: translateY(-1px); }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border2); }
+  .btn-ghost:hover { background: var(--surface2); color: var(--text); }
+  .btn-danger { background: rgba(255,77,109,0.15); color: var(--danger); border: 1px solid rgba(255,77,109,0.2); }
+  .btn-danger:hover { background: rgba(255,77,109,0.25); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+  /* CONTENT */
+  .content { padding: 28px; flex: 1; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* STAT CARDS */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+    position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .stat-card.green::before { background: var(--accent); }
+  .stat-card.blue::before { background: var(--accent2); }
+  .stat-card.orange::before { background: var(--accent3); }
+  .stat-card.gold::before { background: var(--gold); }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+  .stat-value { font-family: 'Syne', sans-serif; font-size: 32px; font-weight: 800; line-height: 1; }
+  .stat-value.green { color: var(--accent); }
+  .stat-value.blue { color: var(--accent2); }
+  .stat-value.orange { color: var(--accent3); }
+  .stat-value.gold { color: var(--gold); }
+  .stat-delta { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .stat-delta span { color: var(--accent); }
+
+  /* SECTION HEADERS */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .section-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; }
+  .section-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* TABLES */
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left; padding: 12px 16px;
+    font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+    background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 500;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 13px 16px; font-size: 13.5px; vertical-align: middle; }
+
+  /* STATUS BADGES */
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  }
+  .pill-green { background: rgba(0,229,160,0.12); color: var(--accent); }
+  .pill-red { background: rgba(255,77,109,0.12); color: var(--danger); }
+  .pill-blue { background: rgba(0,149,255,0.12); color: var(--accent2); }
+  .pill-gold { background: rgba(245,197,24,0.12); color: var(--gold); }
+  .pill-gray { background: rgba(255,255,255,0.07); color: var(--muted); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* FORM */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+  label { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: 0.5px; }
+  input, select, textarea {
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 8px; padding: 10px 14px;
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px;
+    outline: none; transition: border 0.15s; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+  select option { background: var(--surface2); }
+
+  /* PANEL / CARD */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .panel-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+
+  /* TWO COL LAYOUT */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+
+  /* TOGGLE */
+  .toggle-wrap { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .toggle-wrap:last-child { border-bottom: none; }
+  .toggle-info .t-label { font-size: 14px; font-weight: 500; }
+  .toggle-info .t-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--surface2); border: 1px solid var(--border2); border-radius: 22px; transition: 0.2s;
+  }
+  .slider:before {
+    content: ''; position: absolute; height: 14px; width: 14px;
+    left: 3px; bottom: 3px; background: var(--muted); border-radius: 50%; transition: 0.2s;
+  }
+  input:checked + .slider { background: rgba(0,229,160,0.2); border-color: var(--accent); }
+  input:checked + .slider:before { transform: translateX(18px); background: var(--accent); }
+
+  /* MONETIZATION TIERS */
+  .tier-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .tier-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; position: relative;
+    transition: border-color 0.2s;
+  }
+  .tier-card:hover { border-color: var(--border2); }
+  .tier-card.featured { border-color: var(--accent); }
+  .tier-tag {
+    position: absolute; top: -11px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #000; font-size: 10px; font-weight: 700;
+    padding: 3px 12px; border-radius: 20px; letter-spacing: 0.5px;
+  }
+  .tier-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+  .tier-price { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 28px; margin-bottom: 4px; }
+  .tier-price span { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .tier-sub { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+  .tier-features { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .tier-features li { font-size: 12.5px; display: flex; align-items: flex-start; gap: 8px; color: var(--muted); }
+  .tier-features li::before { content: '✓'; color: var(--accent); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+
+  /* GROUP CARD */
+  .group-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
+  .group-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .group-header { display: flex; align-items: center; justify-content: space-between; }
+  .group-name { font-weight: 600; font-size: 14px; }
+  .group-id { font-family: monospace; font-size: 11px; color: var(--muted); background: var(--surface2); padding: 3px 8px; border-radius: 5px; }
+  .group-meta { display: flex; gap: 16px; }
+  .group-meta-item { font-size: 12px; color: var(--muted); }
+  .group-meta-item strong { color: var(--text); }
+  .group-actions { display: flex; gap: 8px; margin-top: 4px; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 200;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: 16px; padding: 28px; width: 520px; max-width: 95vw;
+  }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+  .modal-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 18px; }
+  .modal-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; line-height: 1; }
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+
+  /* ALERT */
+  .alert {
+    padding: 12px 16px; border-radius: 8px; font-size: 13px;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+  }
+  .alert-info { background: rgba(0,149,255,0.1); border: 1px solid rgba(0,149,255,0.2); color: #7ec8ff; }
+  .alert-warn { background: rgba(255,190,11,0.1); border: 1px solid rgba(255,190,11,0.2); color: var(--warn); }
+
+  /* PROGRESS */
+  .progress-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: var(--accent); transition: width 0.3s; }
+
+  /* LOG FEED */
+  .log-feed { display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; }
+  .log-item { display: flex; gap: 12px; align-items: flex-start; font-size: 12.5px; }
+  .log-time { color: var(--muted); white-space: nowrap; font-family: monospace; font-size: 11px; min-width: 80px; }
+  .log-msg { color: var(--text); }
+  .log-tag { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 4px; flex-shrink: 0; }
+  .log-tag.ok { background: rgba(0,229,160,0.15); color: var(--accent); }
+  .log-tag.err { background: rgba(255,77,109,0.15); color: var(--danger); }
+  .log-tag.info { background: rgba(0,149,255,0.15); color: var(--accent2); }
+
+  /* SCROLL */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* RESPONSIVE */
+  @media (max-width: 1100px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .tier-cards { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">ScholarBroad</div>
+    <div class="logo-sub">Admin Dashboard</div>
+  </div>
+  <nav>
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" onclick="showPage('dashboard', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </div>
+
+    <div class="nav-section">Content</div>
+    <div class="nav-item" onclick="showPage('groups', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      WhatsApp Groups <span class="badge">4</span>
+    </div>
+    <div class="nav-item" onclick="showPage('scholarships', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+      Scholarships <span class="badge warn">12</span>
+    </div>
+    <div class="nav-item" onclick="showPage('scheduler', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Scheduler
+    </div>
+
+    <div class="nav-section">Growth</div>
+    <div class="nav-item" onclick="showPage('monetize', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      Monetisation
+    </div>
+    <div class="nav-item" onclick="showPage('subscribers', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Subscribers
+    </div>
+    <div class="nav-item" onclick="showPage('analytics', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Analytics
+    </div>
+
+    <div class="nav-section">System</div>
+    <div class="nav-item" onclick="showPage('api', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      API & Integrations
+    </div>
+    <div class="nav-item" onclick="showPage('settings', this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="avatar">K</div>
+    <div class="avatar-info">
+      <div class="name">Kayode</div>
+      <div class="role">Super Admin</div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-title" id="page-title">Dashboard</div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost btn-sm" onclick="triggerFetch()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Fetch Now
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="openModal('add-group-modal')">
+        + Add Group
+      </button>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ===== DASHBOARD PAGE ===== -->
+    <div class="page active" id="page-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card green">
+          <div class="stat-label">Total Subscribers</div>
+          <div class="stat-value green">2,847</div>
+          <div class="stat-delta">+<span>143</span> this week</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">Scholarships in Buffer</div>
+          <div class="stat-value blue">38</div>
+          <div class="stat-delta"><span>~19 days</span> of content</div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-label">Emails Sent This Month</div>
+          <div class="stat-value orange">1,204</div>
+          <div class="stat-delta">Via <span>87 users</span></div>
+        </div>
+        <div class="stat-card gold">
+          <div class="stat-label">Monthly Revenue</div>
+          <div class="stat-value gold">₦184k</div>
+          <div class="stat-delta">+<span>₦42k</span> vs last month</div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Activity Log
+          </div>
+          <div class="log-feed">
+            <div class="log-item">
+              <span class="log-time">09:14 AM</span>
+              <span class="log-tag ok">SENT</span>
+              <span class="log-msg">Daily post #38 sent to group — "Chevening 2026 Opens"</span>
+            </div>
+            <div class="log-item">
+              <span class="log-time">08:02 AM</span>
+              <span class="log-tag info">FETCH</span>
+              <span class="log-msg">Scraped 6 new scholarships from Scholarship Region D37</span>
+            </div>
+            <div class="log-item">
+              <span class="log-time">07:55 AM</span>
+              <span class="log-tag ok">AI</span>
+              <span class="log-msg">Rewrite completed for 6 posts via Groq Llama-3.3</span>
+            </div>
+            <div class="log-item">
+              <span class="log-time">Yesterday</span>
+              <span class="log-tag ok">SENT</span>
+              <span class="log-msg">Prof email batch: 12 emails sent for user oluwatobi@gmail.com</span>
+            </div>
+            <div class="log-item">
+              <span class="log-time">Yesterday</span>
+              <span class="log-tag err">ERR</span>
+              <span class="log-msg">Bright Scholarship 15 — no new messages in last fetch window</span>
+            </div>
+            <div class="log-item">
+              <span class="log-time">2 days ago</span>
+              <span class="log-tag info">USER</span>
+              <span class="log-msg">New Pro subscriber: adaeze.obi@yahoo.com</span>
+            </div>
+            <div class="log-item">
+              <span class="log-time">2 days ago</span>
+              <span class="log-tag ok">SENT</span>
+              <span class="log-msg">Follow-up email batch: 8 reminder emails dispatched</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Content Buffer Status
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+                <span>Unpublished Scholarships</span><span style="color:var(--accent)">38 posts</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" style="width:76%;background:var(--accent)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+                <span>Scholarship Region D37</span><span style="color:var(--accent2)">14 fetched</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" style="width:55%;background:var(--accent2)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+                <span>Bright Scholarship 15</span><span style="color:var(--accent3)">9 fetched</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" style="width:36%;background:var(--accent3)"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+                <span>Web Scrapers (3 sites)</span><span style="color:var(--gold)">15 fetched</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" style="width:60%;background:var(--gold)"></div></div>
+            </div>
+            <div style="border-top:1px solid var(--border);padding-top:14px">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Next scheduled fetch</div>
+              <div style="font-size:14px;font-weight:600">WhatsApp Groups — in <span style="color:var(--accent)">3 days, 14 hrs</span></div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">Web scrape — in <span style="color:var(--accent2)">1 day</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== GROUPS PAGE ===== -->
+    <div class="page" id="page-groups">
+      <div class="alert alert-info">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></svg>
+        Groups are fetched every 5 days to conserve API tokens. You can override this with "Fetch Now" above.
+      </div>
+      <div class="group-cards" id="groups-container">
+        <!-- Rendered by JS -->
+      </div>
+      <div class="panel">
+        <div class="panel-title">Add New WhatsApp Source Group</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>GROUP NAME</label>
+            <input type="text" id="new-group-name" placeholder="e.g. Global Scholarships Hub">
+          </div>
+          <div class="form-group">
+            <label>GROUP ID</label>
+            <input type="text" id="new-group-id" placeholder="e.g. 120363022832325412@g.us">
+          </div>
+          <div class="form-group">
+            <label>FETCH INTERVAL (DAYS)</label>
+            <select id="new-group-interval">
+              <option value="3">Every 3 days</option>
+              <option value="5" selected>Every 5 days</option>
+              <option value="7">Every 7 days</option>
+            </select>
+          </div>
+          <div class="form-group" style="justify-content:flex-end;padding-top:20px">
+            <button class="btn btn-primary" onclick="addGroup()">+ Add Group</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SCHOLARSHIPS PAGE ===== -->
+    <div class="page" id="page-scholarships">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Scholarship Buffer</div>
+          <div class="section-sub">Posts pending daily broadcast • AI-rewritten, URL-redirected</div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <select style="width:auto;padding:7px 12px">
+            <option>All Sources</option>
+            <option>WhatsApp Groups</option>
+            <option>Web Scrapers</option>
+          </select>
+          <select style="width:auto;padding:7px 12px">
+            <option>All Regions</option>
+            <option>UK</option><option>USA</option><option>Canada</option><option>Europe</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Scholarship</th>
+              <th>Region</th>
+              <th>Deadline</th>
+              <th>Source</th>
+              <th>Status</th>
+              <th>Redirect URL</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="scholarships-tbody">
+            <tr>
+              <td><strong>Chevening Scholarship 2026</strong></td>
+              <td>🇬🇧 UK</td>
+              <td>Nov 5, 2026</td>
+              <td><span class="pill pill-blue">WhatsApp</span></td>
+              <td><span class="pill pill-gold">Pending</span></td>
+              <td style="font-family:monospace;font-size:11px;color:var(--accent)">/s/chevening-2026</td>
+              <td><button class="btn btn-ghost btn-sm">Post Now</button></td>
+            </tr>
+            <tr>
+              <td><strong>Gates Cambridge Scholarship</strong></td>
+              <td>🇬🇧 UK</td>
+              <td>Oct 12, 2026</td>
+              <td><span class="pill pill-green">Scraper</span></td>
+              <td><span class="pill pill-gold">Pending</span></td>
+              <td style="font-family:monospace;font-size:11px;color:var(--accent)">/s/gates-cambridge-26</td>
+              <td><button class="btn btn-ghost btn-sm">Post Now</button></td>
+            </tr>
+            <tr>
+              <td><strong>DAAD Scholarship Germany</strong></td>
+              <td>🇩🇪 Germany</td>
+              <td>Dec 1, 2026</td>
+              <td><span class="pill pill-blue">WhatsApp</span></td>
+              <td><span class="pill pill-gray">Scheduled</span></td>
+              <td style="font-family:monospace;font-size:11px;color:var(--accent)">/s/daad-germany-26</td>
+              <td><button class="btn btn-ghost btn-sm">Post Now</button></td>
+            </tr>
+            <tr>
+              <td><strong>Commonwealth Masters 2026</strong></td>
+              <td>🌍 Multiple</td>
+              <td>Dec 15, 2026</td>
+              <td><span class="pill pill-blue">WhatsApp</span></td>
+              <td><span class="pill pill-green">Posted</span></td>
+              <td style="font-family:monospace;font-size:11px;color:var(--accent)">/s/commonwealth-26</td>
+              <td><button class="btn btn-ghost btn-sm">View</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== SCHEDULER PAGE ===== -->
+    <div class="page" id="page-scheduler">
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-title">Daily Broadcast Settings</div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Auto Daily Post</div>
+                <div class="t-sub">Post 1 scholarship daily at scheduled time</div>
+              </div>
+              <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">AI Rewrite Before Posting</div>
+                <div class="t-sub">Use Groq Llama-3.3 to rewrite in brand voice</div>
+              </div>
+              <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Replace Source URLs</div>
+                <div class="t-sub">Swap original URLs with your redirect links</div>
+              </div>
+              <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Duplicate Detection</div>
+                <div class="t-sub">Skip scholarships already posted in last 60 days</div>
+              </div>
+              <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+          </div>
+          <div style="margin-top:20px;display:flex;gap:14px">
+            <div class="form-group" style="flex:1">
+              <label>POST TIME (WAT)</label>
+              <input type="time" value="09:00">
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>POSTS PER DAY</label>
+              <select>
+                <option value="1" selected>1 post/day</option>
+                <option value="2">2 posts/day</option>
+                <option value="3">3 posts/day</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">WhatsApp Group Fetch Schedule</div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Auto-fetch Groups</div>
+                <div class="t-sub">Fetch messages from all active source groups</div>
+              </div>
+              <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Web Scraper</div>
+                <div class="t-sub">Scrape configured scholarship websites daily</div>
+              </div>
+              <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+          </div>
+          <div style="margin-top:20px;display:flex;gap:14px">
+            <div class="form-group" style="flex:1">
+              <label>GROUP FETCH INTERVAL</label>
+              <select>
+                <option value="3">Every 3 days</option>
+                <option value="5" selected>Every 5 days</option>
+                <option value="7">Every 7 days</option>
+              </select>
+            </div>
+            <div class="form-group" style="flex:1">
+              <label>MAX MSGS PER FETCH</label>
+              <input type="number" value="50">
+            </div>
+          </div>
+          <div style="margin-top:16px">
+            <button class="btn btn-primary" style="width:100%" onclick="triggerFetch()">▶ Run Fetch Manually</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MONETISATION PAGE ===== -->
+    <div class="page" id="page-monetize">
+      <div class="section-header" style="margin-bottom:24px">
+        <div>
+          <div class="section-title">Monetisation Strategy</div>
+          <div class="section-sub">Subscription tiers, redirect revenue & affiliate strategy</div>
+        </div>
+      </div>
+
+      <div class="tier-cards" style="margin-bottom:28px">
+        <div class="tier-card">
+          <div class="tier-name">Free</div>
+          <div class="tier-price">₦0<span>/mo</span></div>
+          <div class="tier-sub">For casual followers</div>
+          <ul class="tier-features">
+            <li>Daily WhatsApp scholarship alerts</li>
+            <li>Access to redirect pages</li>
+            <li>Basic scholarship filter</li>
+          </ul>
+        </div>
+        <div class="tier-card">
+          <div class="tier-name">Scholar</div>
+          <div class="tier-price">₦2,500<span>/mo</span></div>
+          <div class="tier-sub">For active applicants</div>
+          <ul class="tier-features">
+            <li>Everything in Free</li>
+            <li>Professor finder tool</li>
+            <li>10 cold emails/month</li>
+            <li>Email follow-up reminders</li>
+            <li>Application checklist</li>
+          </ul>
+        </div>
+        <div class="tier-card featured">
+          <div class="tier-tag">POPULAR</div>
+          <div class="tier-name">Pro</div>
+          <div class="tier-price">₦6,000<span>/mo</span></div>
+          <div class="tier-sub">For serious applicants</div>
+          <ul class="tier-features">
+            <li>Everything in Scholar</li>
+            <li>Unlimited prof emails</li>
+            <li>Interview coach (Parakleet)</li>
+            <li>Essay generation (AI)</li>
+            <li>Gmail OAuth — send from your address</li>
+            <li>Deadline tracker + reminders</li>
+          </ul>
+        </div>
+        <div class="tier-card">
+          <div class="tier-name">Agency</div>
+          <div class="tier-price">₦15,000<span>/mo</span></div>
+          <div class="tier-sub">For consultants & agents</div>
+          <ul class="tier-features">
+            <li>Manage up to 10 students</li>
+            <li>Bulk application automation</li>
+            <li>White-label reports</li>
+            <li>Priority support</li>
+            <li>Custom branding on emails</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Redirect Page Revenue Model
+          </div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px">
+            Every scholarship link goes through <strong style="color:var(--text)">scholarbroad.suntrenia.com/s/{slug}</strong>. 
+            This page is your monetisation layer — not just a redirect. Here's how to make it earn:
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="background:var(--surface2);border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">🎯 Affiliate Links</div>
+              <div style="font-size:12px;color:var(--muted)">Show IELTS, Duolingo English Test, essay editing services. Commission: $5–$30/referral.</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">📋 Pro Upsell</div>
+              <div style="font-size:12px;color:var(--muted)">"Let us help you apply for this scholarship" → converts free users to paid plans.</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:8px;padding:12px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">✉️ Email Capture</div>
+              <div style="font-size:12px;color:var(--muted)">"Get deadline reminders for this scholarship" → builds your email list.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent3)" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            Revenue Projections
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--surface2);border-radius:8px">
+              <span style="font-size:13px">50 Scholar subscribers</span>
+              <span style="color:var(--accent);font-weight:700">₦125,000/mo</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--surface2);border-radius:8px">
+              <span style="font-size:13px">20 Pro subscribers</span>
+              <span style="color:var(--accent);font-weight:700">₦120,000/mo</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--surface2);border-radius:8px">
+              <span style="font-size:13px">5 Agency subscribers</span>
+              <span style="color:var(--accent);font-weight:700">₦75,000/mo</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--surface2);border-radius:8px">
+              <span style="font-size:13px">Affiliate commissions</span>
+              <span style="color:var(--gold);font-weight:700">~$200/mo</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;background:rgba(0,229,160,0.08);border:1px solid rgba(0,229,160,0.2);border-radius:8px">
+              <span style="font-size:14px;font-weight:600">Conservative Total</span>
+              <span style="color:var(--accent);font-weight:800;font-size:16px">₦320k+/mo</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SUBSCRIBERS PAGE ===== -->
+    <div class="page" id="page-subscribers">
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card green">
+          <div class="stat-label">Total Subscribers</div>
+          <div class="stat-value green">2,847</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">Paid (Scholar+)</div>
+          <div class="stat-value blue">312</div>
+        </div>
+        <div class="stat-card gold">
+          <div class="stat-label">Conversion Rate</div>
+          <div class="stat-value gold">10.9%</div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Email</th><th>Plan</th><th>Joined</th><th>Prof Emails Sent</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Adaeze Obi</td><td>adaeze.obi@yahoo.com</td>
+              <td><span class="pill pill-gold">Pro</span></td><td>May 2, 2026</td><td>24</td>
+              <td><span class="pill pill-green">Active</span></td>
+            </tr>
+            <tr>
+              <td>Emeka Nwosu</td><td>emeka.nwosu@gmail.com</td>
+              <td><span class="pill pill-blue">Scholar</span></td><td>Apr 18, 2026</td><td>8</td>
+              <td><span class="pill pill-green">Active</span></td>
+            </tr>
+            <tr>
+              <td>Fatima Aliyu</td><td>fatima.aliyu@outlook.com</td>
+              <td><span class="pill pill-gray">Free</span></td><td>Mar 30, 2026</td><td>0</td>
+              <td><span class="pill pill-green">Active</span></td>
+            </tr>
+            <tr>
+              <td>Chidi Okeke</td><td>chidi.okeke@gmail.com</td>
+              <td><span class="pill pill-gold">Agency</span></td><td>Mar 12, 2026</td><td>150</td>
+              <td><span class="pill pill-green">Active</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== ANALYTICS PAGE ===== -->
+    <div class="page" id="page-analytics">
+      <div class="stats-grid">
+        <div class="stat-card green">
+          <div class="stat-label">Total Posts Sent</div>
+          <div class="stat-value green">284</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">Redirect Clicks</div>
+          <div class="stat-value blue">12,441</div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-label">Prof Emails Sent</div>
+          <div class="stat-value orange">3,820</div>
+        </div>
+        <div class="stat-card gold">
+          <div class="stat-label">Interview Sessions</div>
+          <div class="stat-value gold">148</div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Top Performing Scholarship Posts (by redirect clicks)</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Scholarship</th><th>Posted</th><th>Clicks</th><th>Conversion</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Chevening 2026</td><td>May 3</td><td style="color:var(--accent)">1,842</td><td><span class="pill pill-green">High</span></td></tr>
+              <tr><td>2</td><td>Gates Cambridge</td><td>Apr 28</td><td style="color:var(--accent)">1,204</td><td><span class="pill pill-green">High</span></td></tr>
+              <tr><td>3</td><td>Commonwealth Masters</td><td>Apr 21</td><td style="color:var(--accent)">987</td><td><span class="pill pill-gold">Med</span></td></tr>
+              <tr><td>4</td><td>DAAD Germany</td><td>Apr 14</td><td style="color:var(--accent)">743</td><td><span class="pill pill-gold">Med</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== API PAGE ===== -->
+    <div class="page" id="page-api">
+      <div class="alert alert-warn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        API keys are stored in environment variables on your server. Never expose them here.
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-title">WhatsApp API — WAHA (Self-Hosted)</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+            WAHA Core is <strong style="color:var(--accent)">completely free</strong> with no message limits. Self-host on a $5/mo VPS (Railway, Render, or DigitalOcean). Best for reading groups + posting.
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>WAHA BASE URL</label>
+            <input type="text" placeholder="http://your-vps:3000" value="">
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>WAHA API KEY</label>
+            <input type="password" placeholder="Set in .env as WAHA_API_KEY">
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="btn btn-ghost btn-sm">Test Connection</button>
+            <button class="btn btn-primary btn-sm">Save</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">AI Provider — Groq (Free Tier)</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+            Groq offers <strong style="color:var(--accent)">14,400 requests/day free</strong> with Llama-3.3-70B. Fastest inference available. No credit card needed to start.
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>GROQ API KEY</label>
+            <input type="password" placeholder="Set in .env as GROQ_API_KEY">
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>MODEL</label>
+            <select>
+              <option selected>llama-3.3-70b-versatile</option>
+              <option>llama-3.1-8b-instant</option>
+              <option>mixtral-8x7b-32768</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="btn btn-ghost btn-sm">Test Connection</button>
+            <button class="btn btn-primary btn-sm">Save</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Email — Gmail OAuth (User Auth)</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+            Users authorize their own Gmail. Emails sent from their address. Same OAuth module as Intellijob.
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>GOOGLE CLIENT ID</label>
+            <input type="text" placeholder="Set in .env as GOOGLE_CLIENT_ID">
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>GOOGLE CLIENT SECRET</label>
+            <input type="password" placeholder="Set in .env as GOOGLE_CLIENT_SECRET">
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="btn btn-ghost btn-sm">Test OAuth Flow</button>
+            <button class="btn btn-primary btn-sm">Save</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Fallback Email — Resend</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+            For users who haven't connected Gmail. <strong style="color:var(--accent)">3,000 emails/month free</strong> on Resend. Sends as "via ScholarBroad".
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>RESEND API KEY</label>
+            <input type="password" placeholder="Set in .env as RESEND_API_KEY">
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>FROM DOMAIN</label>
+            <input type="text" placeholder="noreply@scholarbroad.suntrenia.com">
+          </div>
+          <div style="display:flex;gap:10px;margin-top:4px">
+            <button class="btn btn-ghost btn-sm">Test Send</button>
+            <button class="btn btn-primary btn-sm">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SETTINGS PAGE ===== -->
+    <div class="page" id="page-settings">
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-title">Platform Settings</div>
+          <div style="display:flex;flex-direction:column;gap:0">
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Maintenance Mode</div>
+                <div class="t-sub">Pause all sends and fetches</div>
+              </div>
+              <label class="toggle"><input type="checkbox"><span class="slider"></span></label>
+            </div>
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Professor Finder Feature</div>
+                <div class="t-sub">Enable professor search & email engine</div>
+              </div>
+              <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Interview Coach</div>
+                <div class="t-sub">Enable Parakleet interview helper</div>
+              </div>
+              <label class="toggle"><input type="checkbox" checked><span class="slider"></span></label>
+            </div>
+            <div class="toggle-wrap">
+              <div class="toggle-info">
+                <div class="t-label">Application Automation</div>
+                <div class="t-sub">Essay generation & form-fill engine (Beta)</div>
+              </div>
+              <label class="toggle"><input type="checkbox"><span class="slider"></span></label>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Broadcast Group</div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>YOUR OUTPUT GROUP ID</label>
+            <input type="text" placeholder="Your ScholarBroad WhatsApp group ID">
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>PLATFORM NAME</label>
+            <input type="text" value="ScholarBroad">
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <label>SITE BASE URL</label>
+            <input type="text" value="https://scholarbroad.suntrenia.com">
+          </div>
+          <button class="btn btn-primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</main>
+
+<!-- ADD GROUP MODAL -->
+<div class="modal-overlay" id="add-group-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add WhatsApp Source Group</div>
+      <button class="modal-close" onclick="closeModal('add-group-modal')">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>GROUP NAME</label>
+        <input type="text" placeholder="e.g. Global Scholarships Hub">
+      </div>
+      <div class="form-group full">
+        <label>GROUP ID</label>
+        <input type="text" placeholder="120363022832325412@g.us">
+      </div>
+      <div class="form-group">
+        <label>FETCH INTERVAL</label>
+        <select><option>Every 3 days</option><option selected>Every 5 days</option><option>Every 7 days</option></select>
+      </div>
+      <div class="form-group">
+        <label>STATUS</label>
+        <select><option selected>Active</option><option>Inactive</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('add-group-modal')">Cancel</button>
+      <button class="btn btn-primary">Add Group</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const groups = [
+  { name: "Scholarship Region H25", id: "120363402569445171@g.us", active: true, fetched: "2 days ago", count: 14 },
+  { name: "Bright Scholarship 53", id: "923186211470-1599272722@g.us", active: true, fetched: "2 days ago", count: 9 },
+  { name: "Scholarship Region D37", id: "120363022832325412@g.us", active: true, fetched: "Never", count: 0 },
+  { name: "Bright Scholarship 15", id: "923128400375-1589159659@g.us", active: false, fetched: "Never", count: 0 },
+];
+
+function renderGroups() {
+  const container = document.getElementById('groups-container');
+  container.innerHTML = groups.map((g, i) => `
+    <div class="group-card">
+      <div class="group-header">
+        <div class="group-name">${g.name}</div>
+        <span class="pill ${g.active ? 'pill-green' : 'pill-red'}"><span class="dot"></span>${g.active ? 'Active' : 'Paused'}</span>
+      </div>
+      <div class="group-id">${g.id}</div>
+      <div class="group-meta">
+        <div class="group-meta-item">Last fetch: <strong>${g.fetched}</strong></div>
+        <div class="group-meta-item">Posts fetched: <strong style="color:var(--accent)">${g.count}</strong></div>
+      </div>
+      <div class="group-actions">
+        <button class="btn btn-ghost btn-sm" onclick="toggleGroup(${i})">
+          ${g.active ? '⏸ Pause' : '▶ Activate'}
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="fetchGroup('${g.name}')">Fetch Now</button>
+        <button class="btn btn-danger btn-sm" onclick="removeGroup(${i})">Remove</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleGroup(i) {
+  groups[i].active = !groups[i].active;
+  renderGroups();
+}
+
+function removeGroup(i) {
+  if(confirm(`Remove "${groups[i].name}"?`)) {
+    groups.splice(i, 1);
+    renderGroups();
+  }
+}
+
+function addGroup() {
+  const name = document.getElementById('new-group-name').value.trim();
+  const id = document.getElementById('new-group-id').value.trim();
+  if (!name || !id) { alert('Please fill both fields.'); return; }
+  groups.push({ name, id, active: true, fetched: 'Never', count: 0 });
+  document.getElementById('new-group-name').value = '';
+  document.getElementById('new-group-id').value = '';
+  renderGroups();
+}
+
+function fetchGroup(name) {
+  alert(`Fetching from "${name}"... Check the activity log.`);
+}
+
+function triggerFetch() {
+  alert('Manual fetch triggered for all active groups. Results will appear in the activity log.');
+}
+
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  el.classList.add('active');
+  const titles = {
+    dashboard: 'Dashboard', groups: 'WhatsApp Source Groups',
+    scholarships: 'Scholarship Buffer', scheduler: 'Scheduler',
+    monetize: 'Monetisation', subscribers: 'Subscribers',
+    analytics: 'Analytics', api: 'API & Integrations', settings: 'Settings'
+  };
+  document.getElementById('page-title').textContent = titles[id] || id;
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+renderGroups();
+</script>
+</body>
+</html>
