@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get Started — ScholarBroad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://js.paystack.co/v1/inline.js"></script>
+<style>
+  :root {
+    --bg: #06090f;
+    --surface: #0f1623;
+    --surface2: #1a2236;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.13);
+    --text: #eef2ff;
+    --muted: #7a8499;
+    --accent: #00e5a0;
+    --accent2: #0095ff;
+    --gold: #f5c518;
+    --danger: #ff4d6d;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; min-height:100vh; overflow-x:hidden; }
+
+  .bg-glow { position:fixed; top:-200px; left:50%; transform:translateX(-50%); width:800px; height:500px; background:radial-gradient(ellipse,rgba(0,229,160,0.07) 0%,transparent 70%); pointer-events:none; z-index:0; }
+
+  /* HEADER */
+  header { position:sticky; top:0; z-index:100; background:rgba(6,9,15,0.9); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:20px; color:var(--accent); text-decoration:none; }
+  .header-links { display:flex; gap:20px; align-items:center; font-size:13px; }
+  .header-links a { color:var(--muted); text-decoration:none; transition:color .15s; }
+  .header-links a:hover { color:var(--text); }
+
+  /* HERO */
+  .hero { text-align:center; padding:60px 20px 40px; position:relative; z-index:1; }
+  .hero-badge { display:inline-flex; align-items:center; gap:7px; background:rgba(0,229,160,0.1); border:1px solid rgba(0,229,160,0.2); border-radius:20px; padding:5px 14px; font-size:12px; color:var(--accent); font-weight:600; margin-bottom:20px; }
+  .hero h1 { font-family:'Syne',sans-serif; font-weight:800; font-size:42px; line-height:1.15; margin-bottom:14px; }
+  .hero h1 span { color:var(--accent); }
+  .hero p { font-size:16px; color:var(--muted); max-width:520px; margin:0 auto 10px; line-height:1.65; }
+
+  /* STEP INDICATOR */
+  .steps { display:flex; align-items:center; justify-content:center; gap:0; margin:40px auto 50px; max-width:560px; position:relative; z-index:1; }
+  .step { display:flex; flex-direction:column; align-items:center; gap:8px; flex:1; }
+  .step-circle { width:36px; height:36px; border-radius:50%; border:2px solid var(--border2); background:var(--surface); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:var(--muted); transition:all .3s; position:relative; z-index:1; }
+  .step-circle.active { border-color:var(--accent); background:rgba(0,229,160,0.15); color:var(--accent); }
+  .step-circle.done { border-color:var(--accent); background:var(--accent); color:#000; }
+  .step-label { font-size:11px; color:var(--muted); font-weight:500; white-space:nowrap; }
+  .step-label.active { color:var(--accent); }
+  .step-line { flex:1; height:2px; background:var(--border2); margin:0 -2px; position:relative; top:-14px; }
+  .step-line.done { background:var(--accent); }
+
+  /* MAIN CONTAINER */
+  .container { max-width:960px; margin:0 auto; padding:0 20px 80px; position:relative; z-index:1; }
+
+  /* SECTION PANELS */
+  .section { display:none; animation:fadeIn .3s ease; }
+  .section.active { display:block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+  /* PRICING CARDS */
+  .pricing-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:30px; }
+  .plan-card {
+    background:var(--surface); border:2px solid var(--border);
+    border-radius:16px; padding:24px 18px;
+    cursor:pointer; transition:all .2s; position:relative;
+    text-align:center;
+  }
+  .plan-card:hover { border-color:var(--border2); transform:translateY(-2px); }
+  .plan-card.selected { border-color:var(--accent); background:rgba(0,229,160,0.05); }
+  .plan-card.featured { border-color:rgba(0,229,160,0.4); }
+  .plan-popular { position:absolute; top:-11px; left:50%; transform:translateX(-50%); background:var(--accent); color:#000; font-size:10px; font-weight:800; padding:3px 14px; border-radius:20px; white-space:nowrap; }
+  .plan-name { font-family:'Syne',sans-serif; font-weight:700; font-size:16px; margin-bottom:6px; }
+  .plan-price { font-family:'Syne',sans-serif; font-weight:800; font-size:30px; margin-bottom:3px; }
+  .plan-price small { font-size:13px; font-weight:400; color:var(--muted); }
+  .plan-sub { font-size:12px; color:var(--muted); margin-bottom:16px; }
+  .plan-features { list-style:none; text-align:left; display:flex; flex-direction:column; gap:7px; }
+  .plan-features li { font-size:12px; color:#b0bcd4; display:flex; gap:7px; align-items:flex-start; }
+  .plan-features li::before { content:'✓'; color:var(--accent); font-weight:700; flex-shrink:0; }
+  .plan-features li.no::before { content:'✕'; color:var(--muted); }
+  .plan-features li.no { color:var(--muted); }
+  .plan-select-btn { margin-top:18px; width:100%; padding:10px; border-radius:8px; border:1px solid var(--border2); background:transparent; color:var(--text); font-family:'DM Sans',sans-serif; font-weight:600; font-size:13px; cursor:pointer; transition:all .15s; }
+  .plan-card.selected .plan-select-btn { background:var(--accent); color:#000; border-color:var(--accent); }
+
+  /* FORM */
+  .form-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px; margin-bottom:20px; }
+  .form-card-title { font-family:'Syne',sans-serif; font-weight:700; font-size:18px; margin-bottom:6px; }
+  .form-card-sub { font-size:13px; color:var(--muted); margin-bottom:24px; }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group.full { grid-column:1/-1; }
+  label { font-size:12px; color:var(--muted); font-weight:500; letter-spacing:.5px; text-transform:uppercase; }
+  input, select, textarea {
+    background:var(--surface2); border:1px solid var(--border2);
+    border-radius:8px; padding:11px 14px; color:var(--text);
+    font-family:'DM Sans',sans-serif; font-size:14px; outline:none;
+    transition:border .15s; width:100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color:var(--accent); }
+  textarea { resize:vertical; min-height:90px; }
+  select option { background:var(--surface2); }
+
+  /* FILE UPLOAD */
+  .file-upload { border:2px dashed var(--border2); border-radius:10px; padding:28px; text-align:center; cursor:pointer; transition:all .2s; }
+  .file-upload:hover { border-color:rgba(0,229,160,0.4); background:rgba(0,229,160,0.03); }
+  .file-upload.has-file { border-color:var(--accent); background:rgba(0,229,160,0.05); }
+  .file-upload-icon { font-size:32px; margin-bottom:8px; }
+  .file-upload-text { font-size:14px; font-weight:500; }
+  .file-upload-sub { font-size:12px; color:var(--muted); margin-top:4px; }
+  input[type=file] { display:none; }
+
+  /* GMAIL OAUTH */
+  .oauth-card { background:var(--surface2); border:1px solid var(--border2); border-radius:12px; padding:20px; display:flex; gap:16px; align-items:center; }
+  .oauth-icon { font-size:36px; flex-shrink:0; }
+  .oauth-info { flex:1; }
+  .oauth-info strong { display:block; font-size:15px; margin-bottom:4px; }
+  .oauth-info p { font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .oauth-status { font-size:12px; color:var(--accent); font-weight:600; display:none; margin-top:6px; }
+  .btn-oauth { background:white; color:#333; border:none; border-radius:8px; padding:10px 18px; font-family:'DM Sans',sans-serif; font-weight:600; font-size:13px; cursor:pointer; display:flex; align-items:center; gap:8px; white-space:nowrap; flex-shrink:0; }
+  .btn-oauth:hover { background:#f0f0f0; }
+
+  /* SUMMARY */
+  .summary-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; margin-bottom:20px; }
+  .summary-title { font-family:'Syne',sans-serif; font-weight:700; font-size:18px; margin-bottom:20px; }
+  .summary-rows { display:flex; flex-direction:column; gap:10px; }
+  .summary-row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:14px; }
+  .summary-row:last-child { border-bottom:none; }
+  .summary-row .key { color:var(--muted); }
+  .summary-row .val { font-weight:600; }
+  .summary-total { display:flex; justify-content:space-between; align-items:center; background:rgba(0,229,160,0.08); border:1px solid rgba(0,229,160,0.15); border-radius:10px; padding:16px 18px; margin-top:16px; }
+  .summary-total .key { font-size:15px; font-weight:600; }
+  .summary-total .val { font-family:'Syne',sans-serif; font-weight:800; font-size:24px; color:var(--accent); }
+
+  /* BUTTONS */
+  .btn { padding:13px 28px; border-radius:10px; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-weight:700; font-size:15px; display:inline-flex; align-items:center; gap:8px; transition:all .15s; }
+  .btn-primary { background:var(--accent); color:#000; }
+  .btn-primary:hover { background:#00c88a; transform:translateY(-1px); box-shadow:0 6px 20px rgba(0,229,160,0.25); }
+  .btn-ghost { background:transparent; color:var(--muted); border:1px solid var(--border2); }
+  .btn-ghost:hover { background:var(--surface2); color:var(--text); }
+  .btn-row { display:flex; gap:12px; justify-content:flex-end; margin-top:24px; }
+
+  /* SUCCESS */
+  .success-screen { text-align:center; padding:60px 20px; }
+  .success-icon { font-size:64px; margin-bottom:20px; }
+  .success-title { font-family:'Syne',sans-serif; font-weight:800; font-size:32px; margin-bottom:12px; color:var(--accent); }
+  .success-sub { font-size:16px; color:var(--muted); max-width:460px; margin:0 auto 32px; line-height:1.6; }
+  .what-next { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px; max-width:500px; margin:0 auto 28px; text-align:left; }
+  .what-next-title { font-family:'Syne',sans-serif; font-weight:700; font-size:16px; margin-bottom:16px; }
+  .next-item { display:flex; gap:14px; margin-bottom:14px; }
+  .next-num { width:28px; height:28px; border-radius:50%; background:rgba(0,229,160,0.15); color:var(--accent); font-weight:700; font-size:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .next-text strong { display:block; font-size:14px; margin-bottom:2px; }
+  .next-text span { font-size:12px; color:var(--muted); }
+
+  /* TRUST BADGES */
+  .trust-row { display:flex; justify-content:center; gap:28px; flex-wrap:wrap; margin:40px 0 0; }
+  .trust-item { display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); }
+  .trust-item span { font-size:18px; }
+
+  @media(max-width:768px) {
+    .pricing-grid { grid-template-columns:1fr 1fr; }
+    .form-grid { grid-template-columns:1fr; }
+    .hero h1 { font-size:28px; }
+    .steps { gap:0; }
+    .step-label { font-size:10px; }
+  }
+  @media(max-width:480px) {
+    .pricing-grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-glow"></div>
+
+<header>
+  <a href="/" class="logo">ScholarBroad</a>
+  <div class="header-links">
+    <a href="/">Home</a>
+    <a href="/scholarships">Scholarships</a>
+    <a href="/login">Login</a>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="hero-badge">🎓 Join 2,847 students already using ScholarBroad</div>
+  <h1>Let us handle your<br><span>scholarship applications</span></h1>
+  <p>We find professors, write tailored emails, follow up, and coach you for interviews — automatically.</p>
+</div>
+
+<!-- STEP INDICATOR -->
+<div class="steps" id="step-indicator">
+  <div class="step">
+    <div class="step-circle active" id="sc-1">1</div>
+    <div class="step-label active" id="sl-1">Choose Plan</div>
+  </div>
+  <div class="step-line" id="line-1"></div>
+  <div class="step">
+    <div class="step-circle" id="sc-2">2</div>
+    <div class="step-label" id="sl-2">Your Profile</div>
+  </div>
+  <div class="step-line" id="line-2"></div>
+  <div class="step">
+    <div class="step-circle" id="sc-3">3</div>
+    <div class="step-label" id="sl-3">Upload CV</div>
+  </div>
+  <div class="step-line" id="line-3"></div>
+  <div class="step">
+    <div class="step-circle" id="sc-4">4</div>
+    <div class="step-label" id="sl-4">Connect Gmail</div>
+  </div>
+  <div class="step-line" id="line-4"></div>
+  <div class="step">
+    <div class="step-circle" id="sc-5">5</div>
+    <div class="step-label" id="sl-5">Pay & Launch</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- STEP 1: PLAN SELECTION -->
+  <div class="section active" id="step-1">
+    <div class="pricing-grid">
+
+      <div class="plan-card" onclick="selectPlan(this,'free',0)">
+        <div class="plan-name">Free</div>
+        <div class="plan-price">₦0<small>/mo</small></div>
+        <div class="plan-sub">Daily alerts only</div>
+        <ul class="plan-features">
+          <li>Daily WhatsApp scholarship alerts</li>
+          <li>Access scholarship landing pages</li>
+          <li class="no">Professor finder</li>
+          <li class="no">Cold email generation</li>
+          <li class="no">Interview coaching</li>
+        </ul>
+        <button class="plan-select-btn">Get Started Free</button>
+      </div>
+
+      <div class="plan-card" onclick="selectPlan(this,'scholar',2500)">
+        <div class="plan-name">Scholar</div>
+        <div class="plan-price">₦2,500<small>/mo</small></div>
+        <div class="plan-sub">For active applicants</div>
+        <ul class="plan-features">
+          <li>Everything in Free</li>
+          <li>Professor finder (10 emails/mo)</li>
+          <li>Application checklist</li>
+          <li>Deadline tracker & reminders</li>
+          <li class="no">Interview coaching</li>
+        </ul>
+        <button class="plan-select-btn">Choose Scholar</button>
+      </div>
+
+      <div class="plan-card featured" onclick="selectPlan(this,'pro',6000)">
+        <div class="plan-popular">MOST POPULAR</div>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">₦6,000<small>/mo</small></div>
+        <div class="plan-sub">For serious applicants</div>
+        <ul class="plan-features">
+          <li>Everything in Scholar</li>
+          <li>Unlimited professor emails</li>
+          <li>Auto follow-ups (1, 2, 3 weeks)</li>
+          <li>Send from your own Gmail</li>
+          <li>Essay & SOP generation</li>
+          <li>Interview coach (Parakleet)</li>
+        </ul>
+        <button class="plan-select-btn">Choose Pro</button>
+      </div>
+
+      <div class="plan-card" onclick="selectPlan(this,'agency',15000)">
+        <div class="plan-name">Agency</div>
+        <div class="plan-price">₦15,000<small>/mo</small></div>
+        <div class="plan-sub">For consultants</div>
+        <ul class="plan-features">
+          <li>Manage up to 10 students</li>
+          <li>Bulk automation</li>
+          <li>White-label reports</li>
+          <li>Priority support</li>
+          <li>Custom email branding</li>
+        </ul>
+        <button class="plan-select-btn">Choose Agency</button>
+      </div>
+
+    </div>
+    <div class="trust-row">
+      <div class="trust-item"><span>🔒</span> Secure payment via Paystack</div>
+      <div class="trust-item"><span>↩️</span> Cancel anytime</div>
+      <div class="trust-item"><span>🇳🇬</span> Built for African students</div>
+      <div class="trust-item"><span>✉️</span> Emails sent from YOUR address</div>
+    </div>
+  </div>
+
+  <!-- STEP 2: PROFILE -->
+  <div class="section" id="step-2">
+    <div class="form-card">
+      <div class="form-card-title">Tell us about yourself</div>
+      <div class="form-card-sub">This helps us find the right professors and write truly personalised emails on your behalf.</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="f-name" placeholder="e.g. Adaeze Okonkwo">
+        </div>
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" id="f-email" placeholder="your@email.com">
+        </div>
+        <div class="form-group">
+          <label>Nationality</label>
+          <input type="text" id="f-nationality" placeholder="e.g. Nigerian">
+        </div>
+        <div class="form-group">
+          <label>Degree Applying For</label>
+          <select id="f-degree">
+            <option value="">Select degree</option>
+            <option>PhD</option>
+            <option>Masters (MSc/MBA/MA)</option>
+            <option>Bachelors (BSc/BA)</option>
+            <option>Postdoc</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Target Study Country</label>
+          <input type="text" id="f-country" placeholder="e.g. United Kingdom, Germany, Canada">
+        </div>
+        <div class="form-group">
+          <label>Field / Course of Study</label>
+          <input type="text" id="f-field" placeholder="e.g. Machine Learning, Public Health, Law">
+        </div>
+        <div class="form-group">
+          <label>Undergraduate GPA (or equivalent)</label>
+          <input type="text" id="f-gpa" placeholder="e.g. 4.2/5.0 or 3.7/4.0 or Second Class Upper">
+        </div>
+        <div class="form-group">
+          <label>Target Start Date</label>
+          <select id="f-start">
+            <option>September 2026</option>
+            <option>January 2027</option>
+            <option>September 2027</option>
+            <option>Flexible</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>Research Interest / Proposed Topic <span style="color:var(--muted);font-size:11px">(PhD applicants — be as specific as possible)</span></label>
+          <textarea id="f-research" placeholder="e.g. I am interested in explainable AI for medical diagnosis, specifically in developing interpretable deep learning models for early cancer detection in resource-limited settings..."></textarea>
+        </div>
+        <div class="form-group full">
+          <label>Password</label>
+          <input type="password" id="f-password" placeholder="Create a secure password">
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="goStep(1)">← Back</button>
+      <button class="btn btn-primary" onclick="goStep(3)">Continue → Upload CV</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: CV UPLOAD -->
+  <div class="section" id="step-3">
+    <div class="form-card">
+      <div class="form-card-title">Upload your CV / Resume</div>
+      <div class="form-card-sub">We use your CV to personalise professor emails and application essays. PDF preferred, max 5MB.</div>
+
+      <div class="file-upload" id="cv-dropzone" onclick="document.getElementById('cv-input').click()">
+        <div class="file-upload-icon">📄</div>
+        <div class="file-upload-text" id="cv-text">Click to upload your CV</div>
+        <div class="file-upload-sub">PDF, DOC, DOCX — max 5MB</div>
+        <input type="file" id="cv-input" accept=".pdf,.doc,.docx" onchange="handleCVUpload(this)">
+      </div>
+
+      <div style="margin-top:20px;padding:16px;background:var(--surface2);border-radius:10px;font-size:13px;color:var(--muted);line-height:1.6">
+        <strong style="color:var(--text);display:block;margin-bottom:6px">🔒 Your CV is private</strong>
+        It is only used by our AI system to write your emails. It is never shared publicly or with third parties.
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="goStep(2)">← Back</button>
+      <button class="btn btn-ghost" onclick="goStep(4)" style="color:var(--muted)">Skip for now</button>
+      <button class="btn btn-primary" onclick="goStep(4)">Continue → Connect Gmail</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: GMAIL OAUTH -->
+  <div class="section" id="step-4">
+    <div class="form-card">
+      <div class="form-card-title">Connect your Gmail</div>
+      <div class="form-card-sub">Emails sent from your own address get dramatically higher response rates from professors. This is optional but strongly recommended for Pro users.</div>
+
+      <div class="oauth-card" style="margin-bottom:16px">
+        <div class="oauth-icon">📧</div>
+        <div class="oauth-info">
+          <strong>Authorize Gmail Access</strong>
+          <p>We'll send emails as you, using your Gmail. Professors see your real email address and replies go directly to your inbox. We only request permission to send — we cannot read your existing emails.</p>
+          <div class="oauth-status" id="oauth-status">✓ Gmail connected successfully!</div>
+        </div>
+        <button class="btn-oauth" onclick="connectGmail()">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M5.26620003,9.76452941 C6.19878754,6.93863203 8.85444915,4.90909091 12,4.90909091 C13.6909091,4.90909091 15.2181818,5.50909091 16.4181818,6.49090909 L19.9090909,3 C17.7818182,1.14545455 15.0545455,0 12,0 C7.27006974,0 3.1977497,2.69829785 1.23999023,6.65002441 L5.26620003,9.76452941 Z"/><path fill="#34A853" d="M16.0407269,18.0125889 C14.9509167,18.7163016 13.5660892,19.0909091 12,19.0909091 C8.86648613,19.0909091 6.21911939,17.076871 5.27698177,14.2678769 L1.23746264,17.3349879 C3.19279051,21.2936293 7.26500293,24 12,24 C14.9328362,24 17.7353462,22.9573905 19.834192,20.9995801 L16.0407269,18.0125889 Z"/><path fill="#4A90E2" d="M19.834192,20.9995801 C22.0291676,18.9520994 23.4545455,15.903663 23.4545455,12 C23.4545455,11.2909091 23.3454545,10.5272727 23.1818182,9.81818182 L12,9.81818182 L12,14.4545455 L18.4363636,14.4545455 C18.1187732,16.013626 17.2662994,17.2212117 16.0407269,18.0125889 L19.834192,20.9995801 Z"/><path fill="#FBBC05" d="M5.27698177,14.2678769 C5.03832634,13.556323 4.90909091,12.7937589 4.90909091,12 C4.90909091,11.2182781 5.03443647,10.4668121 5.26620003,9.76452941 L1.23999023,6.65002441 C0.43658717,8.26043162 0,10.0753848 0,12 C0,13.9195484 0.444780743,15.7301709 1.23746264,17.3349879 L5.27698177,14.2678769 Z"/></svg>
+          Connect Gmail
+        </button>
+      </div>
+
+      <div style="padding:14px 16px;background:rgba(0,149,255,0.08);border:1px solid rgba(0,149,255,0.15);border-radius:10px;font-size:12.5px;color:#7ec8ff;line-height:1.6">
+        <strong style="display:block;margin-bottom:4px">ℹ️ What we request access to:</strong>
+        <strong>Send emails</strong> on your behalf · <strong>Check for replies</strong> from professors (so we stop follow-ups when they respond). We cannot read, delete, or modify your existing emails.
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="goStep(3)">← Back</button>
+      <button class="btn btn-ghost" onclick="goStep(5)" style="color:var(--muted)">Skip — use platform email</button>
+      <button class="btn btn-primary" onclick="goStep(5)">Continue → Review & Pay</button>
+    </div>
+  </div>
+
+  <!-- STEP 5: SUMMARY & PAYMENT -->
+  <div class="section" id="step-5">
+    <div class="summary-card">
+      <div class="summary-title">Review your order</div>
+      <div class="summary-rows">
+        <div class="summary-row"><span class="key">Plan</span><span class="val" id="sum-plan">Pro</span></div>
+        <div class="summary-row"><span class="key">Name</span><span class="val" id="sum-name">—</span></div>
+        <div class="summary-row"><span class="key">Email</span><span class="val" id="sum-email">—</span></div>
+        <div class="summary-row"><span class="key">Degree</span><span class="val" id="sum-degree">—</span></div>
+        <div class="summary-row"><span class="key">Field</span><span class="val" id="sum-field">—</span></div>
+        <div class="summary-row"><span class="key">Target Country</span><span class="val" id="sum-country">—</span></div>
+        <div class="summary-row"><span class="key">Gmail Connected</span><span class="val" id="sum-gmail">Not connected</span></div>
+        <div class="summary-row"><span class="key">CV Uploaded</span><span class="val" id="sum-cv">Not uploaded</span></div>
+      </div>
+      <div class="summary-total">
+        <span class="key">Total today</span>
+        <span class="val" id="sum-total">₦6,000</span>
+      </div>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:20px;font-size:13px;color:var(--muted);line-height:1.6">
+      By subscribing you agree to our <a href="/terms" style="color:var(--accent)">Terms of Service</a>. Subscription renews monthly. Cancel anytime from your dashboard.
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-ghost" onclick="goStep(4)">← Back</button>
+      <button class="btn btn-primary" id="pay-btn" onclick="initiatePayment()" style="min-width:220px">
+        🔒 Pay Securely with Paystack
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP 6: SUCCESS -->
+  <div class="section" id="step-6">
+    <div class="success-screen">
+      <div class="success-icon">🎉</div>
+      <div class="success-title">You're all set!</div>
+      <div class="success-sub">Welcome to ScholarBroad Pro. Your automated application engine is starting up. Here's what happens next:</div>
+
+      <div class="what-next">
+        <div class="what-next-title">What happens automatically</div>
+        <div class="next-item">
+          <div class="next-num">1</div>
+          <div class="next-text">
+            <strong>Research proposal generated</strong>
+            <span>Our AI creates a compelling proposal from your research interest and CV — usually within minutes.</span>
+          </div>
+        </div>
+        <div class="next-item">
+          <div class="next-num">2</div>
+          <div class="next-text">
+            <strong>50-80 professors discovered</strong>
+            <span>We search Google Scholar and faculty pages to find professors working in your exact area.</span>
+          </div>
+        </div>
+        <div class="next-item">
+          <div class="next-num">3</div>
+          <div class="next-text">
+            <strong>Tailored emails written</strong>
+            <span>Each email references the professor's actual recent work — not a template.</span>
+          </div>
+        </div>
+        <div class="next-item">
+          <div class="next-num">4</div>
+          <div class="next-text">
+            <strong>You review before we send</strong>
+            <span>Check your email queue in the dashboard and approve emails before anything goes out.</span>
+          </div>
+        </div>
+        <div class="next-item">
+          <div class="next-num">5</div>
+          <div class="next-text">
+            <strong>Sending starts — follow-ups automated</strong>
+            <span>5-8 emails per day from your Gmail. Auto follow-ups at 1, 2, and 3 weeks if no reply.</span>
+          </div>
+        </div>
+      </div>
+
+      <a href="/dashboard" class="btn btn-primary" style="display:inline-flex;margin:0 auto">
+        Go to My Dashboard →
+      </a>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+let selectedPlan = { name: 'pro', price: 6000 };
+let gmailConnected = false;
+let cvUploaded = false;
+let currentStep = 1;
+
+const PAYSTACK_PUBLIC_KEY = 'pk_test_YOUR_PAYSTACK_PUBLIC_KEY'; // replace with live key
+
+function selectPlan(card, name, price) {
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.plan-select-btn').forEach(b => {
+    b.textContent = b.closest('.plan-card').querySelector('.plan-name').textContent.includes('Free')
+      ? 'Get Started Free' : 'Choose ' + b.closest('.plan-card').querySelector('.plan-name').textContent;
+  });
+  card.classList.add('selected');
+  card.querySelector('.plan-select-btn').textContent = '✓ Selected';
+  selectedPlan = { name, price };
+  setTimeout(() => goStep(2), 300);
+}
+
+function goStep(n) {
+  // Validate step 2
+  if (n > 2 && currentStep >= 2) {
+    const name = document.getElementById('f-name').value.trim();
+    const email = document.getElementById('f-email').value.trim();
+    const degree = document.getElementById('f-degree').value;
+    if (n === 3 && (!name || !email || !degree)) {
+      alert('Please fill in your name, email, and degree level to continue.');
+      return;
+    }
+  }
+
+  currentStep = n;
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+  updateStepUI(n);
+  if (n === 5) populateSummary();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateStepUI(active) {
+  for (let i = 1; i <= 5; i++) {
+    const circle = document.getElementById('sc-' + i);
+    const label = document.getElementById('sl-' + i);
+    const line = document.getElementById('line-' + i);
+    if (!circle) continue;
+    circle.classList.remove('active', 'done');
+    label.classList.remove('active');
+    if (line) line.classList.remove('done');
+    if (i < active) { circle.classList.add('done'); circle.textContent = '✓'; if (line) line.classList.add('done'); }
+    else if (i === active) { circle.classList.add('active'); circle.textContent = i; label.classList.add('active'); }
+    else { circle.textContent = i; }
+  }
+}
+
+function handleCVUpload(input) {
+  if (input.files[0]) {
+    cvUploaded = true;
+    const zone = document.getElementById('cv-dropzone');
+    zone.classList.add('has-file');
+    document.getElementById('cv-text').textContent = '✓ ' + input.files[0].name;
+  }
+}
+
+function connectGmail() {
+  // In production: window.location.href = '/api/auth/gmail?redirect=/subscribe#step-4'
+  // For demo:
+  gmailConnected = true;
+  document.getElementById('oauth-status').style.display = 'block';
+  document.querySelector('.btn-oauth').textContent = '✓ Connected';
+  document.querySelector('.btn-oauth').style.background = 'rgba(0,229,160,0.15)';
+  document.querySelector('.btn-oauth').style.color = 'var(--accent)';
+}
+
+function populateSummary() {
+  const planNames = { free: 'Free', scholar: 'Scholar', pro: 'Pro', agency: 'Agency' };
+  document.getElementById('sum-plan').textContent = planNames[selectedPlan.name] + (selectedPlan.price ? ` — ₦${selectedPlan.price.toLocaleString()}/mo` : ' — Free');
+  document.getElementById('sum-name').textContent = document.getElementById('f-name').value || '—';
+  document.getElementById('sum-email').textContent = document.getElementById('f-email').value || '—';
+  document.getElementById('sum-degree').textContent = document.getElementById('f-degree').value || '—';
+  document.getElementById('sum-field').textContent = document.getElementById('f-field').value || '—';
+  document.getElementById('sum-country').textContent = document.getElementById('f-country').value || '—';
+  document.getElementById('sum-gmail').textContent = gmailConnected ? '✓ Connected' : 'Not connected';
+  document.getElementById('sum-cv').textContent = cvUploaded ? '✓ Uploaded' : 'Not uploaded';
+  document.getElementById('sum-total').textContent = selectedPlan.price ? `₦${selectedPlan.price.toLocaleString()}/month` : 'Free';
+  if (!selectedPlan.price) document.getElementById('pay-btn').textContent = '🚀 Create Free Account';
+}
+
+function initiatePayment() {
+  const email = document.getElementById('f-email').value.trim();
+  const name = document.getElementById('f-name').value.trim();
+
+  if (!email) { alert('Please go back and enter your email address.'); return; }
+
+  if (!selectedPlan.price) {
+    // Free plan — just register
+    registerUser();
+    return;
+  }
+
+  const handler = PaystackPop.setup({
+    key: PAYSTACK_PUBLIC_KEY,
+    email,
+    amount: selectedPlan.price * 100, // kobo
+    currency: 'NGN',
+    ref: 'SB-' + Date.now(),
+    metadata: {
+      custom_fields: [
+        { display_name: 'Plan', variable_name: 'plan', value: selectedPlan.name },
+        { display_name: 'Name', variable_name: 'name', value: name }
+      ]
+    },
+    callback: function(response) {
+      verifyAndRegister(response.reference);
+    },
+    onClose: function() {
+      console.log('Payment cancelled');
+    }
+  });
+  handler.openIframe();
+}
+
+async function verifyAndRegister(reference) {
+  document.getElementById('pay-btn').textContent = 'Verifying payment...';
+  try {
+    const res = await fetch('/api/payment/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        reference,
+        plan: selectedPlan.name,
+        name: document.getElementById('f-name').value,
+        email: document.getElementById('f-email').value,
+        password: document.getElementById('f-password').value,
+        degree: document.getElementById('f-degree').value,
+        field: document.getElementById('f-field').value,
+        country: document.getElementById('f-country').value,
+        gpa: document.getElementById('f-gpa').value,
+        researchInterest: document.getElementById('f-research').value,
+        targetStart: document.getElementById('f-start').value,
+        nationality: document.getElementById('f-nationality').value,
+        gmailConnected
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      goStep(6);
+    } else {
+      alert('Payment verified but registration failed: ' + data.error);
+    }
+  } catch (err) {
+    alert('Error verifying payment. Please contact support.');
+  }
+}
+
+async function registerUser() {
+  // For free plan
+  goStep(6);
+}
+
+// Drag and drop CV
+const dropzone = document.getElementById('cv-dropzone');
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--accent)'; });
+dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = ''; });
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    cvUploaded = true;
+    dropzone.classList.add('has-file');
+    document.getElementById('cv-text').textContent = '✓ ' + file.name;
+  }
+});
+</script>
+</body>
+</html>

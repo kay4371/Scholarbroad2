@@ -982,9 +982,9 @@ app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../public/adm
 app.get('/s/:slug', async (req, res) => {
   try {
     const scholarship = await getBySlug(req.params.slug);
-    if (!scholarship) return res.status(404).sendFile(path.join(__dirname, '../public/404.html'));
+    if (!scholarship) return res.status(404).sendFile(path.join(__dirname, './public/404.html'));
     const fs = require('fs');
-    const html = fs.readFileSync(path.join(__dirname, '../public/scholarship-landing.html'), 'utf8');
+    const html = fs.readFileSync(path.join(__dirname, './public/scholarship-landing.html'), 'utf8');
     const injected = html.replace(
       '</head>',
       `<script>window.__SCHOLARSHIP__ = ${JSON.stringify(scholarship)};</script></head>`
@@ -1345,16 +1345,25 @@ app.delete('/api/admin/groups/:id', adminAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// app.post('/api/admin/fetch-now', adminAuth, async (req, res) => {
+//   try {
+//     const fetch = await fetchAllDueGroups();
+//     const processed = await processUnprocessedPosts();
+//     res.json({ ok: true, fetch, processed });
+//   } catch (err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
 app.post('/api/admin/fetch-now', adminAuth, async (req, res) => {
   try {
-    const fetch = await fetchAllDueGroups();
+    const force = req.body?.forceAll === true;
+    const fetch = await fetchAllDueGroups(force);
     const processed = await processUnprocessedPosts();
     res.json({ ok: true, fetch, processed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
   const { getDb } = require('./services/mongoService');
   const db = getDb();

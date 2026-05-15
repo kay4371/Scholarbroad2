@@ -110,8 +110,11 @@ async function processUnprocessedPosts() {
         .replace('{LINK_PLACEHOLDER}', redirectUrl);
 
       // Save as scholarship
+     // Save as scholarship
       await scholarshipCol.insertOne({
         slug,
+        id: slug,
+        normalizedUrl: `${BASE_URL}/s/${slug}`,
         redirectUrl,
         originalUrls: post.urls,
         sourceGroup: post.groupName,
@@ -133,7 +136,6 @@ async function processUnprocessedPosts() {
         affiliateClicks: {},
         createdAt: new Date()
       });
-
       // Mark raw post as processed
       await rawCol.updateOne(
         { _id: post._id },
@@ -144,7 +146,7 @@ async function processUnprocessedPosts() {
       successCount++;
 
       // Small delay to avoid rate limits
-      await new Promise(r => setTimeout(r, 800));
+     await new Promise(r => setTimeout(r, 2000));
 
     } catch (err) {
       console.error(`[Groq] Error processing post ${post._id}:`, err.message);

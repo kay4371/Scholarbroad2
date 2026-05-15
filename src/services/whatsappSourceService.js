@@ -16,17 +16,22 @@ async function getActiveGroups() {
   return db.collection('whatsapp_groups').find({ active: true }).toArray();
 }
 
-function isDue(group) {
+// function isDue(group) {
+//   if (!group.lastFetched) return true;
+//   const daysSince = (Date.now() - new Date(group.lastFetched).getTime()) / (1000 * 60 * 60 * 24);
+//   return daysSince >= (group.fetchIntervalDays || 5);
+// }
+function isDue(group, force = false) {
+  if (force) return true;
   if (!group.lastFetched) return true;
   const daysSince = (Date.now() - new Date(group.lastFetched).getTime()) / (1000 * 60 * 60 * 24);
   return daysSince >= (group.fetchIntervalDays || 5);
 }
-
 async function fetchGroupMessages(groupId, limit = 60) {
   try {
     const res = await axios.get(
-      `${WAHA_BASE}/api/${SESSION}/chats/${encodeURIComponent(groupId)}/messages`,
-      { headers: wahaHeaders(), params: { limit, downloadMedia: false } }
+      `${WAHA_BASE}/api/messages`,
+      { headers: wahaHeaders(), params: { session: SESSION, chatId: groupId, limit, downloadMedia: false } }
     );
     return res.data || [];
   } catch (err) {
@@ -34,6 +39,7 @@ async function fetchGroupMessages(groupId, limit = 60) {
     return [];
   }
 }
+
 
 function isScholarshipMessage(text = '') {
   if (!text || text.length < 80) return false;
@@ -82,12 +88,30 @@ async function markGroupFetched(groupId, count) {
   );
 }
 
-// ── Main entry: fetch all groups that are due ─────────────────────────────────
-async function fetchAllDueGroups() {
+// // ── Main entry: fetch all groups that are due ─────────────────────────────────
+// async function fetchAllDueGroups() {
+//   const groups = await getActiveGroups();
+//   const results = [];
+//   for (const group of groups) {
+//     if (!isDue(group)) {
+//       console.log(`[WAHA] Skipping ${group.name} — not due`);
+//       results.push({ group: group.name, skipped: true });
+//       continue;
+//     }
+//     console.log(`[WAHA] Fetching: ${group.name}`);
+//     const messages = await fetchGroupMessages(group.id);
+//     const saved = await saveRawMessages(messages, group.id, group.name);
+//     await markGroupFetched(group.id, saved);
+//     console.log(`[WAHA] Saved ${saved} posts from ${group.name}`);
+//     results.push({ group: group.name, fetched: messages.length, saved });
+//   }
+//   return results;
+// }
+async function fetchAllDueGroups(force = false) {
   const groups = await getActiveGroups();
   const results = [];
   for (const group of groups) {
-    if (!isDue(group)) {
+    if (!isDue(group, force)) {
       console.log(`[WAHA] Skipping ${group.name} — not due`);
       results.push({ group: group.name, skipped: true });
       continue;
@@ -101,7 +125,6 @@ async function fetchAllDueGroups() {
   }
   return results;
 }
-
 // ── Admin CRUD ────────────────────────────────────────────────────────────────
 async function addGroup({ name, id, fetchIntervalDays = 5 }) {
   const db = getDb();
