@@ -921,6 +921,8 @@
 
 
 
+const connectDb = () => mongoService.connect();
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -974,9 +976,9 @@ function adminAuth(req, res, next) {
 // ════════════════════════════════════════════════════════════════════════════
 
 // ── Pages ─────────────────────────────────────────────────────────────────────
-app.get('/subscribe', (req, res) => res.sendFile(path.join(__dirname, '../public/subscribe.html')));
-app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, '../public/dashboard.html')));
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '../public/admin-dashboard.html')));
+app.get('/subscribe', (req, res) => res.sendFile(path.join(__dirname, 'public/subscribe.html')));
+app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public/dashboard.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin-dashboard.html')));
 
 // ── Scholarship landing page (/s/:slug) ───────────────────────────────────────
 app.get('/s/:slug', async (req, res) => {
@@ -1007,7 +1009,7 @@ app.post('/api/track-click', async (req, res) => {
 app.post('/api/reminders', async (req, res) => {
   const { email, slug, deadline } = req.body;
   if (!email || !slug) return res.status(400).json({ error: 'email and slug required' });
-  const { getDb } = require('./services/mongoService');
+  
   const db = getDb();
   await db.collection('reminders').updateOne(
     { email, slug },
@@ -1093,7 +1095,7 @@ app.post('/api/payment/verify', async (req, res) => {
 
 // ── Async PhD pipeline kickoff (runs in background after registration) ─────────
 async function kickOffPhDPipeline(userId, profileData) {
-  const { getDb } = require('./services/mongoService');
+ 
   const db = getDb();
   try {
     console.log(`[Pipeline] Starting PhD pipeline for user ${userId}`);
@@ -1142,7 +1144,7 @@ async function kickOffPhDPipeline(userId, profileData) {
 
 // ── Profile ───────────────────────────────────────────────────────────────────
 app.get('/api/user/profile', requireAuth, async (req, res) => {
-  const { getDb } = require('./services/mongoService');
+  
   const db = getDb();
   const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
   const user = await getUserById(req.user.userId);
@@ -1150,7 +1152,7 @@ app.get('/api/user/profile', requireAuth, async (req, res) => {
 });
 
 app.put('/api/user/profile', requireAuth, async (req, res) => {
-  const { getDb } = require('./services/mongoService');
+  
   const db = getDb();
   await db.collection('user_profiles').updateOne(
     { userId: req.user.userId },
@@ -1165,7 +1167,7 @@ app.post('/api/user/cv-upload', requireAuth, upload.single('cv'), async (req, re
   try {
     // In production: upload to Cloudflare R2 or MongoDB GridFS
     // For now: store as base64 in DB (replace with R2 for production)
-    const { getDb } = require('./services/mongoService');
+   
     const db = getDb();
     const cvBase64 = req.file.buffer.toString('base64');
     await db.collection('user_profiles').updateOne(
@@ -1186,7 +1188,7 @@ app.post('/api/user/cv-upload', requireAuth, upload.single('cv'), async (req, re
 
 // ── Dashboard stats ───────────────────────────────────────────────────────────
 app.get('/api/user/dashboard-stats', requireAuth, async (req, res) => {
-  const { getDb } = require('./services/mongoService');
+  
   const db = getDb();
   const userId = req.user.userId;
   const [totalProfs, emailsSent, replies, pendingApproval, notifications] = await Promise.all([
@@ -1207,7 +1209,7 @@ app.get('/api/user/professors', requireAuth, requirePlan('scholar','pro','agency
 
 // ── Re-run professor discovery ─────────────────────────────────────────────────
 app.post('/api/user/discover-professors', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
-  const { getDb } = require('./services/mongoService');
+ 
   const db = getDb();
   const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
   if (!profile) return res.status(400).json({ error: 'Profile not found' });
@@ -1243,7 +1245,7 @@ app.post('/api/user/email-queue/:id/skip', requireAuth, async (req, res) => {
 
 // ── Approve all pending emails ────────────────────────────────────────────────
 app.post('/api/user/email-queue/approve-all', requireAuth, requirePlan('pro','agency'), async (req, res) => {
-  const { getDb } = require('./services/mongoService');
+ 
   const db = getDb();
   await db.collection('email_queue').updateMany(
     { userId: req.user.userId, status: 'pending_review' },
@@ -1254,7 +1256,7 @@ app.post('/api/user/email-queue/approve-all', requireAuth, requirePlan('pro','ag
 
 // ── Mark notification as read ─────────────────────────────────────────────────
 app.post('/api/user/notifications/:id/read', requireAuth, async (req, res) => {
-  const { getDb } = require('./services/mongoService');
+  
   const db = getDb();
   const { ObjectId } = require('mongodb');
   await db.collection('notifications').updateOne(
@@ -1312,7 +1314,7 @@ app.post('/api/cron/daily-email-cycle', adminAuth, async (req, res) => {
 // ── [CRON] Check for professor replies ────────────────────────────────────────
 app.post('/api/cron/check-replies', adminAuth, async (req, res) => {
   try {
-    const { getDb } = require('./services/mongoService');
+   
     const db = getDb();
     const users = await db.collection('users').find({
       plan: { $in: ['scholar','pro','agency'] },
@@ -1365,7 +1367,7 @@ app.post('/api/admin/fetch-now', adminAuth, async (req, res) => {
   }
 });
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
-  const { getDb } = require('./services/mongoService');
+  
   const db = getDb();
   const [buffer, totalGroups, totalUsers, totalPublished, totalPaidUsers] = await Promise.all([
     bufferCount(),
@@ -1378,7 +1380,7 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
 });
 
 app.get('/api/admin/scholarships', adminAuth, async (req, res) => {
-  const { getDb } = require('./services/mongoService');
+  
   const db = getDb();
   const page = parseInt(req.query.page || '1');
   const scholarships = await db.collection('scholarships')

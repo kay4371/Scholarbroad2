@@ -323,10 +323,9 @@
 
     <!-- ACTION BUTTONS -->
     <div class="action-row">
-      <a href="#" id="official-link" class="btn-official" onclick="trackClick()">
-        🎓 Go to Official Application Page
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </a>
+    <a href="#" id="official-link" class="btn-official">
+  🎓 Go to Official Application Page
+    </a>
       <button class="btn-share" onclick="shareThis()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         Share
@@ -351,7 +350,7 @@
       <div class="upsell-feat">Send from your own Gmail address</div>
     </div>
     <div class="upsell-actions">
-      <button class="btn-upsell" onclick="window.location='https://scholarbroad.suntrenia.com/pro'">Get Pro — Start Applying Smarter</button>
+     <button class="btn-upsell" onclick="window.location='/subscribe'">Get Pro — Start Applying Smarter</button>
       <div class="upsell-price">From <strong>₦6,000/month</strong> · Cancel anytime</div>
     </div>
   </div>
@@ -438,67 +437,139 @@
 </div>
 
 <script>
-  // ---- DATA HYDRATION FROM URL PARAMS (for dynamic use) ----
-  // In production, your server renders this page with real data.
-  // For preview/demo, we read from URL params: ?title=...&deadline=...&country=...
   function getParam(key) {
     return new URLSearchParams(window.location.search).get(key);
   }
 
-  function hydrate() {
-    const title = getParam('title') || 'Chevening Scholarship 2026 — United Kingdom';
-    const flag = getParam('flag') || '🇬🇧';
-    const deadline = getParam('deadline') || 'November 5, 2026';
-    const host = getParam('host') || '🇬🇧 United Kingdom';
-    const level = getParam('level') || 'Masters (1 year)';
-    const funding = getParam('funding') || 'Full — Tuition + Living';
-    const eligible = getParam('eligible') || '160+ Countries';
-    const field = getParam('field') || 'All Fields';
-    const url = getParam('url') || '#';
-    const desc = getParam('desc') || document.getElementById('s-desc').textContent;
+function hydrate() {
+    const s = window.__SCHOLARSHIP__ || {};
 
+    function isAggregator(url) {
+      const aggregators = [
+        'scholarshipregion.com', 'opportunitydesk.org',
+        'scholars4dev.com', 'afterschoolafrica.com',
+        'myscholly.com', 'scholarships.com'
+      ];
+      return !url || aggregators.some(d => url.includes(d));
+    }
+
+    const title    = s.title    || getParam('title')    || 'Scholarship Opportunity';
+    const flag     = s.flag     || getParam('flag')     || '🌍';
+    const deadline = s.deadline || getParam('deadline') || 'Check website';
+    const host     = (s.flag || '') + ' ' + (s.country || getParam('host') || 'International');
+    const level    = s.degree   || getParam('level')    || 'Various';
+    const funding  = s.funding  || getParam('funding')  || 'See details';
+    const eligible = s.eligible || getParam('eligible') || 'Check website';
+    const field    = s.field    || getParam('field')    || 'All Fields';
+    const desc     = s.summary  || getParam('desc')     || '';
+
+    // ✅ officialUrl priority: DB-extracted field → non-aggregator originalUrl → null
+    const rawUrl      = (s.originalUrls && s.originalUrls[0]) || null;
+    const officialUrl = (s.officialUrl && !isAggregator(s.officialUrl))
+      ? s.officialUrl
+      : (rawUrl && !isAggregator(rawUrl) ? rawUrl : null);
+
+    // Update page title and meta
     document.getElementById('page-title').textContent = title + ' — ScholarBroad';
-    document.getElementById('og-title').content = title;
-    document.getElementById('s-flag').textContent = flag;
-    document.getElementById('s-title').textContent = title;
-    document.getElementById('s-host').textContent = host;
-    document.getElementById('s-level').textContent = level;
+    const ogTitle = document.getElementById('og-title');
+    if (ogTitle) ogTitle.content = title;
+
+    // Update all visible fields
+    document.getElementById('s-flag').textContent        = flag;
+    document.getElementById('s-title').textContent       = title;
+    document.getElementById('s-host').textContent        = host;
+    document.getElementById('s-level').textContent       = level;
     document.getElementById('s-fund-detail').textContent = funding;
-    document.getElementById('s-deadline').textContent = deadline;
-    document.getElementById('s-eligible').textContent = eligible;
-    document.getElementById('s-field').textContent = field;
-    document.getElementById('official-link').href = url;
-    document.getElementById('s-desc').textContent = desc;
-    document.getElementById('urgency-text').textContent = `Application closes ${deadline}`;
+    document.getElementById('s-deadline').textContent    = deadline;
+    document.getElementById('s-eligible').textContent    = eligible;
+    document.getElementById('s-field').textContent       = field;
+    document.getElementById('s-desc').textContent        = desc;
+    document.getElementById('urgency-text').textContent  = 'Application closes ' + deadline;
     document.getElementById('breadcrumb-title').textContent = title.split('—')[0].trim();
+
+    // Update tag pills
+    const fundingTag = document.getElementById('s-funding');
+    if (fundingTag) fundingTag.textContent = '💰 ' + funding;
+    const degreeTag = document.getElementById('s-degree');
+    if (degreeTag) degreeTag.textContent = '🎓 ' + level;
+    const countryTag = document.getElementById('s-country');
+    if (countryTag) countryTag.textContent = '🌍 ' + eligible;
+
+    // Official application button — rawUrl & officialUrl already declared above
+    const officialBtn = document.getElementById('official-link');
+    if (officialUrl) {
+      officialBtn.href      = officialUrl;
+      officialBtn.target    = '_blank';
+      officialBtn.rel       = 'noopener noreferrer';
+      officialBtn.removeAttribute('onclick');
+      officialBtn.innerHTML = '🎓 Go to Official Application Page ↗';
+} else {
+      officialBtn.style.display = 'none';
+    }
 
     // Days left calculation
     const deadlineDate = new Date(deadline);
-    const today = new Date();
-    const diff = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
-    if (!isNaN(diff)) {
-      const el = document.getElementById('days-left');
-      el.innerHTML = `${diff > 0 ? diff : 'Closed'}<small>days left</small>`;
-      if (diff < 30) el.style.color = 'var(--danger)';
+    const today        = new Date();
+    const diff         = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
+    const el           = document.getElementById('days-left');
+    if (!isNaN(diff) && diff > 0) {
+      el.innerHTML = `${diff}<small>days left</small>`;
+      if (diff < 30)      el.style.color = 'var(--danger)';
       else if (diff < 60) el.style.color = 'var(--gold)';
-      else el.style.color = 'var(--accent)';
+      else                el.style.color = 'var(--accent)';
+    } else {
+      el.innerHTML = `<small>Check site</small>`;
+    }
+
+    updateAffiliateLinks(s.country || '');
+
+    const moreSection = document.querySelector('.more-section');
+    if (moreSection) moreSection.style.display = 'none';
+  }
+
+  function updateAffiliateLinks(country) {
+    // IELTS affiliate link
+    const ieltsEl = document.querySelector('[onclick*="ielts"]');
+    if (ieltsEl) {
+      ieltsEl.href = 'https://www.ielts.org/take-a-test/test-locations';
+      ieltsEl.target = '_blank';
+      ieltsEl.rel = 'noopener noreferrer';
+    }
+
+    // Essay editing affiliate link — replace with your Selar/Gumroad link
+    const essayEl = document.querySelector('[onclick*="essay"]');
+    if (essayEl) {
+      essayEl.href = 'https://selar.co'; // TODO: replace with your real affiliate link
+      essayEl.target = '_blank';
+      essayEl.rel = 'noopener noreferrer';
+    }
+
+    // Duolingo English Test affiliate link
+    const duolingoEl = document.querySelector('[onclick*="duolingo"]');
+    if (duolingoEl) {
+      duolingoEl.href = 'https://englishtest.duolingo.com';
+      duolingoEl.target = '_blank';
+      duolingoEl.rel = 'noopener noreferrer';
     }
   }
 
   function trackClick() {
-    // Send analytics event to your backend
+    const slug = window.location.pathname.split('/s/')[1];
+    if (!slug) return;
     fetch('/api/track-click', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug: window.location.pathname.split('/s/')[1], type: 'official_link' })
+      body: JSON.stringify({ slug, type: 'official_link' })
     }).catch(() => {});
   }
 
   function trackAff(name) {
+    const slug = window.location.pathname.split('/s/')[1];
+    if (!slug) return;
     fetch('/api/track-click', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slug: window.location.pathname.split('/s/')[1], type: 'affiliate_' + name })
+      body: JSON.stringify({ slug, type: 'affiliate_' + name })
     }).catch(() => {});
   }
 
@@ -508,21 +579,22 @@
     if (navigator.share) {
       navigator.share({ title, text: `Check out this scholarship on ScholarBroad: ${title}`, url });
     } else {
-      navigator.clipboard.writeText(url);
-      alert('Link copied to clipboard!');
+      navigator.clipboard.writeText(url).then(() => alert('Link copied to clipboard!'));
     }
   }
 
   function saveScholarship() {
     const btn = document.getElementById('save-btn-text');
     btn.textContent = btn.textContent === 'Save' ? '✓ Saved' : 'Save';
-    // In production: POST /api/user/saved-scholarships
+    // TODO: POST /api/user/saved-scholarships
   }
 
   function submitCapture() {
     const email = document.getElementById('capture-email').value.trim();
-    if (!email || !email.includes('@')) { alert('Please enter a valid email.'); return; }
-    // In production: POST /api/reminders with email + slug + deadline
+    if (!email || !email.includes('@')) {
+      alert('Please enter a valid email.');
+      return;
+    }
     fetch('/api/reminders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -536,6 +608,16 @@
     document.getElementById('capture-email').style.display = 'none';
     document.querySelector('.btn-capture').style.display = 'none';
   }
+
+  // Also fix the Pro upsell button to go to /subscribe not /pro
+  window.addEventListener('DOMContentLoaded', function() {
+    const proBtn = document.querySelector('.btn-upsell');
+    if (proBtn) {
+      proBtn.onclick = function() {
+        window.location.href = '/subscribe';
+      };
+    }
+  });
 
   hydrate();
 </script>

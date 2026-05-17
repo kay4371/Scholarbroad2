@@ -1,13 +1,4 @@
-/**
- * groqRewriteService.js
- *
- * URL resolution strategy: Priority 1 ONLY.
- * Groq reads the raw WhatsApp post text and extracts the official URL directly.
- * If it can't find a real, non-aggregator URL → officialUrl stays null → button hidden.
- * No scraping. No fallback to social media links.
- */
-
-const { validateOfficialUrl } = require('./officialUrlExtractor');
+const { extractOfficialUrl } = require('./officialUrlExtractor');
 const Groq = require('groq-sdk');
 const mongoService = require('./mongoService');
 const getDb = () => mongoService.db;
@@ -16,11 +7,29 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const BASE_URL = process.env.SITE_BASE_URL || 'https://scholarbroad.suntrenia.com';
 
+const AGGREGATOR_DOMAINS = [
+  'scholarshipregion.com', 'opportunitydesk.org', 'scholars4dev.com',
+  'afterschoolafrica.com', 'myscholly.com', 'scholarships.com',
+  'fastweb.com', 'cappex.com', 'niche.com'
+];
+
+function isAggregator(url = '') {
+  if (!url) return true;
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return AGGREGATOR_DOMAINS.some(d => hostname.includes(d));
+  } catch { return true; }
+}
+
+function getOfficialUrl(originalUrls = []) {
+  const official = (originalUrls || []).find(u => !isAggregator(u));
+  return official || null;
+}
+
 function slugify(text = '') {
   return text.toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-')
+    .trim().replace(/\s+/g, '-')
     .slice(0, 60);
 }
 
@@ -28,18 +37,14 @@ function buildRedirectUrl(slug) {
   return `${BASE_URL}/s/${slug}`;
 }
 
-/**
- * Strip URLs from text before sending to Groq for the rewrite —
- * but we pass the ORIGINAL text (with URLs) to the URL-extraction part
- * of the prompt so Groq can read them.
- */
 function stripUrls(text = '') {
   return text.replace(/https?:\/\/[^\s\]\)>,"]+/gi, '').trim();
 }
 
 // ── Rewrite a single raw post via Groq ───────────────────────────────────────
 async function rewritePost(rawText) {
-  // We keep the raw text intact (URLs included) so Groq can extract the official URL.
+  const cleanText = stripUrls(rawText);
+
   const systemPrompt = `You are ScholarBroad's content editor. Your job is to:
 1. Extract structured scholarship data from a raw WhatsApp message
 2. Rewrite the message in ScholarBroad's brand voice: clear, exciting, student-friendly, emoji-enhanced but not overdone
@@ -50,7 +55,7 @@ Brand voice: Informative, warm, motivating. Nigerian/African student audience. S
   const userPrompt = `Extract and rewrite this scholarship post:
 
 ---
-${rawText}
+${cleanText}
 ---
 
 Return this exact JSON structure:
@@ -65,7 +70,7 @@ Return this exact JSON structure:
   "eligible": "Who can apply",
   "summary": "2-3 sentence summary of the opportunity",
   "whatsappText": "The rewritten WhatsApp post in ScholarBroad brand voice. 150-250 words. Include title, country, degree, funding, deadline, brief description, and end with: 'Full details & application link 👇\\n{LINK_PLACEHOLDER}'",
-  "officialUrl": "IMPORTANT: Look carefully at every URL in the post text above. Find the ONE URL that goes directly to a university, government body, research institution, or official scholarship foundation website. This must NOT be scholarshipregion.com, opportunitydesk.org, facebook.com, instagram.com, twitter.com, linkedin.com, youtube.com, bit.ly, or ANY other aggregator, social media, or link shortener. If the only URLs in the post are aggregators or social media, return null. If you are not 100% sure the URL is an official source, return null.",
+  "officialUrl": "The REAL official university or scholarship body URL mentioned in the text. NOT scholarshipregion.com or any aggregator site URL. Return null if not found.",
   "slug": "url-friendly-slug-for-this-scholarship"
 }`;
 
@@ -75,7 +80,7 @@ Return this exact JSON structure:
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ],
-    temperature: 0.3,
+    temperature: 0.4,
     max_tokens: 1000
   });
 
@@ -101,18 +106,13 @@ async function processUnprocessedPosts() {
 
   for (const post of unprocessed) {
     try {
-      // Pass the full raw text — URLs included — so Groq can find the official URL
       const structured = await rewritePost(post.rawText);
-
       if (!structured || !structured.title) {
-        await rawCol.updateOne(
-          { _id: post._id },
-          { $set: { processed: true, parseError: true } }
-        );
+        await rawCol.updateOne({ _id: post._id }, { $set: { processed: true, parseError: true } });
         continue;
       }
 
-      // ── Build slug + redirect URL ──────────────────────────────────────────
+      // Build slug + redirect URL
       const baseSlug = structured.slug || slugify(structured.title);
       let slug = baseSlug;
       let attempt = 0;
@@ -126,25 +126,47 @@ async function processUnprocessedPosts() {
       const finalWhatsappText = (structured.whatsappText || '')
         .replace('{LINK_PLACEHOLDER}', redirectUrl);
 
-      // ── Priority 1 ONLY: validate what Groq extracted ─────────────────────
-      // validateOfficialUrl() strips any blocked domain (social media, aggregators, shorteners).
-      // If Groq returned null or a bad URL, officialUrl stays null → button hidden.
-      const officialUrl = validateOfficialUrl(structured.officialUrl);
+      // ── Determine official URL (3-tier priority) ──────────────────────────
+      let officialUrl = null;
 
-      if (officialUrl) {
-        console.log(`[Groq] ✓ Official URL from post text: ${officialUrl}`);
-      } else {
-        console.log(`[Groq] ℹ No valid official URL found for "${structured.title}" — button will be hidden`);
+      // Priority 1 — Groq extracted it directly from the post text
+      if (structured.officialUrl && !isAggregator(structured.officialUrl)) {
+        officialUrl = structured.officialUrl;
+        console.log(`[Groq] Official URL from post text: ${officialUrl}`);
       }
 
-      // ── Save scholarship to DB ─────────────────────────────────────────────
+      // Priority 2 — Run URL extractor on the source page
+      if (!officialUrl) {
+        const sourceUrl = (post.urls || [])[0];
+        if (sourceUrl) {
+          try {
+            const extracted = await extractOfficialUrl(sourceUrl);
+            if (extracted.success) {
+              officialUrl = extracted.best_url;
+              console.log(`[URLExtractor] Official URL found: ${officialUrl}`);
+            }
+          } catch (extractErr) {
+            console.log(`[URLExtractor] Could not extract: ${extractErr.message}`);
+          }
+        }
+      }
+
+      // Priority 3 — Check if any originalUrl is already non-aggregator
+      if (!officialUrl) {
+        officialUrl = getOfficialUrl(post.urls || []);
+        if (officialUrl) {
+          console.log(`[URLExtractor] Using non-aggregator originalUrl: ${officialUrl}`);
+        }
+      }
+
+      // Save scholarship to DB
       await scholarshipCol.insertOne({
         slug,
         id: slug,
         normalizedUrl: `${BASE_URL}/s/${slug}`,
         redirectUrl,
-        officialUrl,                        // null if not found — button hidden
-        originalUrls: post.urls || [],
+        officialUrl: officialUrl || null,
+        originalUrls: post.urls,
         sourceGroup: post.groupName,
         sourceGroupId: post.groupId,
         rawPostId: post._id,
@@ -174,15 +196,12 @@ async function processUnprocessedPosts() {
       console.log(`[Groq] ✓ Processed: "${structured.title}" → /s/${slug}`);
       successCount++;
 
-      // Delay to respect Groq rate limits
-      await new Promise(r => setTimeout(r, 4000));
+      // Small delay to avoid rate limits
+      await new Promise(r => setTimeout(r, 2000));
 
     } catch (err) {
       console.error(`[Groq] Error processing post ${post._id}:`, err.message);
-      await rawCol.updateOne(
-        { _id: post._id },
-        { $set: { processed: true, parseError: true } }
-      );
+      await rawCol.updateOne({ _id: post._id }, { $set: { processed: true, parseError: true } });
     }
   }
 
@@ -199,7 +218,7 @@ async function getNextUnpublished() {
   );
 }
 
-// ── Mark a scholarship as published ───────────────────────────────────────────
+// ── Mark a scholarship as published ──────────────────────────────────────────
 async function markPublished(slug) {
   const db = getDb();
   await db.collection('scholarships').updateOne(
@@ -208,7 +227,7 @@ async function markPublished(slug) {
   );
 }
 
-// ── Track redirect clicks ──────────────────────────────────────────────────────
+// ── Track redirect clicks ─────────────────────────────────────────────────────
 async function trackClick(slug, type = 'official_link') {
   const db = getDb();
   const update = type === 'official_link'
@@ -217,13 +236,13 @@ async function trackClick(slug, type = 'official_link') {
   await db.collection('scholarships').updateOne({ slug }, update);
 }
 
-// ── Get scholarship by slug (for landing page) ─────────────────────────────────
+// ── Get scholarship by slug (for landing page) ────────────────────────────────
 async function getBySlug(slug) {
   const db = getDb();
   return db.collection('scholarships').findOne({ slug });
 }
 
-// ── Count unpublished posts in buffer ──────────────────────────────────────────
+// ── Count unpublished posts in buffer ─────────────────────────────────────────
 async function bufferCount() {
   const db = getDb();
   return db.collection('scholarships').countDocuments({ published: false });
