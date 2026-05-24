@@ -6,15 +6,27 @@ const multer = require('multer');
 const mongoService = require('./services/mongoService');
 const getDb = () => mongoService.db;
 const { fetchAllDueGroups, addGroup, toggleGroup, removeGroup, listGroups, seedDefaultGroups } = require('./services/whatsappSourceService');
-const { processUnprocessedPosts, getNextUnpublished, markPublished, trackClick, getBySlug, bufferCount, sendToGroupWithFallback } = require('./services/groqRewriteService');
+const { processUnprocessedPosts, getNextUnpublished, markPublished, trackClick, getBySlug, bufferCount } = require('./services/groqRewriteService');
 const { register, login, requireAuth, requirePlan, verifyAndUpgrade, getUserById } = require('./services/authService');
 const { discoverProfessors, getProfessorsForUser } = require('./services/professorSearchService');
 const { generateEmailsForUser, getEmailQueue, approveEmail, editEmail, skipEmail, generateResearchProposal, extractKeywords } = require('./services/emailGenerationService');
 const { sendApprovedEmails, scheduleFollowUps, detectReplies, runDailySendCycle } = require('./services/followUpService');
 const { getAuthUrl, handleCallback, disconnectGmail } = require('./services/gmailOAuthService');
 
-// ── RSS fallback (only used when WAHA groups return 0 new posts) ──────────────
-const { runRssFallback } = require('./services/scraperFallbackService');
+// ── WhatsApp broadcast sender ─────────────────────────────────────────────────
+const axios = require('axios');
+const WAHA_BASE    = process.env.WAHA_BASE_URL  || 'http://localhost:3000';
+const WAHA_KEY     = process.env.WAHA_API_KEY   || '';
+const WAHA_SESSION = process.env.WAHA_SESSION   || 'scholarbroad';
+const BROADCAST_GROUP = process.env.BROADCAST_GROUP_ID;
+
+async function sendToGroup(text) {
+  await axios.post(
+    `${WAHA_BASE}/api/sendText`,
+    { chatId: BROADCAST_GROUP, text, session: WAHA_SESSION },
+    { headers: { 'Content-Type': 'application/json', ...(WAHA_KEY ? { 'X-Api-Key': WAHA_KEY } : {}) } }
+  );
+}
 
 // ── App setup ─────────────────────────────────────────────────────────────────
 const app = express();
@@ -22,6 +34,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// File upload (CV) — store in memory, upload to R2/GridFS
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ── Admin auth middleware ─────────────────────────────────────────────────────
@@ -36,6 +49,7 @@ function adminAuth(req, res, next) {
 // PUBLIC ROUTES
 // ════════════════════════════════════════════════════════════════════════════
 
+// ── Pages ─────────────────────────────────────────────────────────────────────
 app.get('/subscribe', (req, res) => res.sendFile(path.join(__dirname, 'public/subscribe.html')));
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public/dashboard.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin-dashboard.html')));
@@ -57,26 +71,6 @@ app.get('/s/:slug', async (req, res) => {
   }
 });
 
-// ── Monetisation redirect page (/go/:slug) ────────────────────────────────────
-// User lands here after clicking "Apply on School Website" from /s/:slug
-// Contains affiliate offers, WhatsApp CTA, subscribe CTA, then official link
-app.get('/go/:slug', async (req, res) => {
-  try {
-    const scholarship = await getBySlug(req.params.slug);
-    if (!scholarship) return res.status(404).sendFile(path.join(__dirname, './public/404.html'));
-    const fs = require('fs');
-    const html = fs.readFileSync(path.join(__dirname, './public/redirect-landing.html'), 'utf8');
-    const injected = html.replace(
-      '</head>',
-      `<script>window.__SCHOLARSHIP__ = ${JSON.stringify(scholarship)};</script></head>`
-    );
-    await trackClick(req.params.slug, 'redirect_page').catch(() => {});
-    res.send(injected);
-  } catch (err) {
-    res.status(500).send('Server error');
-  }
-});
-
 // ── Click tracking ────────────────────────────────────────────────────────────
 app.post('/api/track-click', async (req, res) => {
   const { slug, type } = req.body;
@@ -85,7 +79,7 @@ app.post('/api/track-click', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Deadline reminder capture ─────────────────────────────────────────────────
+// ── Deadline reminder email capture ───────────────────────────────────────────
 app.post('/api/reminders', async (req, res) => {
   const { email, slug, deadline } = req.body;
   if (!email || !slug) return res.status(400).json({ error: 'email and slug required' });
@@ -101,7 +95,7 @@ app.post('/api/reminders', async (req, res) => {
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
 
-// ── Public scholarships feed ──────────────────────────────────────────────────
+// ── Public scholarships feed (for website/app display) ───────────────────────
 app.get('/api/scholarships', async (req, res) => {
   try {
     const db = getDb();
@@ -139,24 +133,37 @@ app.get('/api/stats', async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 app.post('/api/auth/register', async (req, res) => {
-  try { res.json({ ok: true, ...await register(req.body) }); }
-  catch (err) { res.status(400).json({ error: err.message }); }
+  try {
+    const result = await register(req.body);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  try { res.json({ ok: true, ...await login(req.body) }); }
-  catch (err) { res.status(401).json({ error: err.message }); }
+  try {
+    const result = await login(req.body);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(401).json({ error: err.message });
+  }
 });
 
+// ── Gmail OAuth flow ──────────────────────────────────────────────────────────
 app.get('/api/auth/gmail', requireAuth, (req, res) => {
-  res.redirect(getAuthUrl(req.user.userId));
+  const url = getAuthUrl(req.user.userId);
+  res.redirect(url);
 });
 
 app.get('/api/auth/gmail/callback', async (req, res) => {
   try {
-    await handleCallback(req.query.code, req.query.state);
+    const { code, state: userId } = req.query;
+    await handleCallback(code, userId);
     res.redirect('/dashboard?gmail=connected');
-  } catch { res.redirect('/dashboard?gmail=error'); }
+  } catch (err) {
+    res.redirect('/dashboard?gmail=error');
+  }
 });
 
 app.post('/api/auth/gmail/disconnect', requireAuth, async (req, res) => {
@@ -168,46 +175,73 @@ app.post('/api/auth/gmail/disconnect', requireAuth, async (req, res) => {
 app.post('/api/payment/verify', async (req, res) => {
   try {
     const { reference, plan, ...profileData } = req.body;
+
+    // Free plan — just register
     if (!reference || plan === 'free') {
-      return res.json({ ok: true, ...await register({ ...profileData, plan: 'free' }) });
+      const result = await register({ ...profileData, plan: 'free' });
+      return res.json({ ok: true, ...result });
     }
+
+    // Register user first
     const result = await register({ ...profileData, plan, paystackReference: reference });
+
+    // Verify payment with Paystack
     await verifyAndUpgrade({ reference, userId: result.userId, plan });
-    if (profileData.degree === 'PhD' && ['scholar','pro','agency'].includes(plan)) {
+
+    // Kick off PhD pipeline for paid PhD applicants
+    if (profileData.degree === 'PhD' && ['scholar', 'pro', 'agency'].includes(plan)) {
       kickOffPhDPipeline(result.userId, profileData).catch(console.error);
     }
+
     res.json({ ok: true, ...result });
-  } catch (err) { res.status(400).json({ error: err.message }); }
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
+// ── Async PhD pipeline kickoff ────────────────────────────────────────────────
 async function kickOffPhDPipeline(userId, profileData) {
   const db = getDb();
   try {
-    console.log(`[Pipeline] Starting for user ${userId}`);
-    const proposal  = await generateResearchProposal(profileData.researchInterest, profileData.field, '');
-    const keywords  = await extractKeywords(profileData.researchInterest, profileData.field);
-    await db.collection('user_profiles').updateOne({ userId }, { $set: { researchProposal: proposal, researchKeywords: keywords } });
+    console.log(`[Pipeline] Starting PhD pipeline for user ${userId}`);
+
+    const proposal = await generateResearchProposal(
+      profileData.researchInterest,
+      profileData.field,
+      ''
+    );
+    const keywords = await extractKeywords(profileData.researchInterest, profileData.field);
+
+    await db.collection('user_profiles').updateOne(
+      { userId },
+      { $set: { researchProposal: proposal, researchKeywords: keywords } }
+    );
+
     await discoverProfessors(userId, keywords, profileData.country);
     await generateEmailsForUser(userId);
-    console.log(`[Pipeline] ✓ Done for user ${userId}`);
+
+    console.log(`[Pipeline] ✓ PhD pipeline complete for user ${userId}`);
+
     await db.collection('notifications').insertOne({
-      userId, type: 'pipeline_ready',
+      userId,
+      type: 'pipeline_ready',
       message: '🎉 Your professor emails are ready! Go to Email Queue to review and approve.',
-      read: false, createdAt: new Date()
+      read: false,
+      createdAt: new Date()
     });
-  } catch (err) { console.error(`[Pipeline] Error:`, err.message); }
+  } catch (err) {
+    console.error(`[Pipeline] Error for user ${userId}:`, err.message);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// USER ROUTES
+// USER ROUTES (authenticated)
 // ════════════════════════════════════════════════════════════════════════════
 
 app.get('/api/user/profile', requireAuth, async (req, res) => {
   const db = getDb();
-  const [profile, user] = await Promise.all([
-    db.collection('user_profiles').findOne({ userId: req.user.userId }),
-    getUserById(req.user.userId)
-  ]);
+  const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+  const user = await getUserById(req.user.userId);
   res.json({ ...user, profile });
 });
 
@@ -220,22 +254,29 @@ app.put('/api/user/profile', requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── CV Upload ─────────────────────────────────────────────────────────────────
 app.post('/api/user/cv-upload', requireAuth, upload.single('cv'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
     const db = getDb();
+    const cvBase64 = req.file.buffer.toString('base64');
     await db.collection('user_profiles').updateOne(
       { userId: req.user.userId },
       { $set: {
-        cvPath: `cv_${req.user.userId}`, cvFilename: req.file.originalname,
-        cvMimeType: req.file.mimetype, cvData: req.file.buffer.toString('base64'),
+        cvPath: `cv_${req.user.userId}`,
+        cvFilename: req.file.originalname,
+        cvMimeType: req.file.mimetype,
+        cvData: cvBase64,
         cvUploadedAt: new Date()
       }}
     );
     res.json({ ok: true, filename: req.file.originalname });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
+// ── Dashboard stats ───────────────────────────────────────────────────────────
 app.get('/api/user/dashboard-stats', requireAuth, async (req, res) => {
   const db = getDb();
   const userId = req.user.userId;
@@ -249,11 +290,13 @@ app.get('/api/user/dashboard-stats', requireAuth, async (req, res) => {
   res.json({ totalProfs, emailsSent, replies, pendingApproval, notifications });
 });
 
-app.get('/api/user/professors', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
-  res.json(await getProfessorsForUser(req.user.userId, req.query));
+// ── Professors ────────────────────────────────────────────────────────────────
+app.get('/api/user/professors', requireAuth, requirePlan('scholar', 'pro', 'agency'), async (req, res) => {
+  const result = await getProfessorsForUser(req.user.userId, req.query);
+  res.json(result);
 });
 
-app.post('/api/user/discover-professors', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+app.post('/api/user/discover-professors', requireAuth, requirePlan('scholar', 'pro', 'agency'), async (req, res) => {
   const db = getDb();
   const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
   if (!profile) return res.status(400).json({ error: 'Profile not found' });
@@ -263,21 +306,28 @@ app.post('/api/user/discover-professors', requireAuth, requirePlan('scholar','pr
   res.json({ ok: true, message: 'Professor discovery started — check back in a few minutes' });
 });
 
-app.get('/api/user/email-queue', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
-  res.json(await getEmailQueue(req.user.userId, req.query.status || null));
+// ── Email queue ───────────────────────────────────────────────────────────────
+app.get('/api/user/email-queue', requireAuth, requirePlan('scholar', 'pro', 'agency'), async (req, res) => {
+  const emails = await getEmailQueue(req.user.userId, req.query.status || null);
+  res.json(emails);
 });
 
 app.post('/api/user/email-queue/:id/approve', requireAuth, async (req, res) => {
-  await approveEmail(req.params.id, req.user.userId); res.json({ ok: true });
-});
-app.post('/api/user/email-queue/:id/edit', requireAuth, async (req, res) => {
-  await editEmail(req.params.id, req.user.userId, req.body); res.json({ ok: true });
-});
-app.post('/api/user/email-queue/:id/skip', requireAuth, async (req, res) => {
-  await skipEmail(req.params.id, req.user.userId); res.json({ ok: true });
+  await approveEmail(req.params.id, req.user.userId);
+  res.json({ ok: true });
 });
 
-app.post('/api/user/email-queue/approve-all', requireAuth, requirePlan('pro','agency'), async (req, res) => {
+app.post('/api/user/email-queue/:id/edit', requireAuth, async (req, res) => {
+  await editEmail(req.params.id, req.user.userId, req.body);
+  res.json({ ok: true });
+});
+
+app.post('/api/user/email-queue/:id/skip', requireAuth, async (req, res) => {
+  await skipEmail(req.params.id, req.user.userId);
+  res.json({ ok: true });
+});
+
+app.post('/api/user/email-queue/approve-all', requireAuth, requirePlan('pro', 'agency'), async (req, res) => {
   const db = getDb();
   await db.collection('email_queue').updateMany(
     { userId: req.user.userId, status: 'pending_review' },
@@ -286,6 +336,7 @@ app.post('/api/user/email-queue/approve-all', requireAuth, requirePlan('pro','ag
   res.json({ ok: true });
 });
 
+// ── Notifications ─────────────────────────────────────────────────────────────
 app.post('/api/user/notifications/:id/read', requireAuth, async (req, res) => {
   const db = getDb();
   const { ObjectId } = require('mongodb');
@@ -297,81 +348,89 @@ app.post('/api/user/notifications/:id/read', requireAuth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// CRON ROUTES
+// CRON ROUTES (called by external scheduler e.g. Cloudflare Worker / cron-job.org)
 // ════════════════════════════════════════════════════════════════════════════
 
-// ── Fetch WhatsApp groups + process through Groq (with RSS fallback) ──────────
+// Fetch new posts from WhatsApp groups + process through Groq
 app.post('/api/cron/fetch-groups', adminAuth, async (req, res) => {
   try {
-    const fetchResults = await fetchAllDueGroups();
-
-    // Count how many new posts were actually saved across all groups
-    const totalNewPosts = fetchResults.reduce((sum, r) => sum + (r.saved || 0), 0);
-
-    // ── RSS FALLBACK: only if WAHA groups saved zero new posts ────────────────
-    let fallbackResult = null;
-    if (totalNewPosts === 0) {
-      console.log('[Cron] Zero new posts from WhatsApp — activating RSS fallback...');
-      const fallbackSaved = await runRssFallback();
-      fallbackResult = { activated: true, saved: fallbackSaved };
-    }
-
+    const fetch = await fetchAllDueGroups();
     const processed = await processUnprocessedPosts();
-    res.json({ ok: true, fetch: fetchResults, fallback: fallbackResult, processed });
+    res.json({ ok: true, fetch, processed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── Daily post to WhatsApp broadcast group (WAHA + Whapi fallback) ────────────
+// Post one scholarship to WhatsApp broadcast group
 app.post('/api/cron/daily-post', adminAuth, async (req, res) => {
   try {
     const next = await getNextUnpublished();
     if (!next) return res.json({ ok: true, message: 'Buffer empty' });
-    const sendResult = await sendToGroupWithFallback(next.whatsappText);
+    await sendToGroup(next.whatsappText);
     await markPublished(next.slug);
-    res.json({ ok: true, posted: next.title, method: sendResult.method });
+    res.json({ ok: true, posted: next.title });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// Process raw WhatsApp posts through Groq only
 app.post('/api/cron/process-posts', adminAuth, async (req, res) => {
   try {
-    res.json({ ok: true, ...await processUnprocessedPosts() });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const result = await processUnprocessedPosts();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
+// Daily email send cycle for all paid users
 app.post('/api/cron/daily-email-cycle', adminAuth, async (req, res) => {
-  try { await runDailySendCycle(); res.json({ ok: true }); }
-  catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    await runDailySendCycle();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
+// Check Gmail inboxes for professor replies
 app.post('/api/cron/check-replies', adminAuth, async (req, res) => {
   try {
     const db = getDb();
     const users = await db.collection('users').find({
-      plan: { $in: ['scholar','pro','agency'] }, gmailConnected: true
+      plan: { $in: ['scholar', 'pro', 'agency'] },
+      gmailConnected: true
     }).toArray();
-    for (const user of users) await detectReplies(user._id.toString()).catch(console.error);
+    for (const user of users) {
+      await detectReplies(user._id.toString()).catch(console.error);
+    }
     res.json({ ok: true, checked: users.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
 // ADMIN ROUTES
 // ════════════════════════════════════════════════════════════════════════════
 
-app.get('/api/admin/groups',    adminAuth, async (req, res) => res.json(await listGroups()));
-app.post('/api/admin/groups',   adminAuth, async (req, res) => {
+app.get('/api/admin/groups', adminAuth, async (req, res) => res.json(await listGroups()));
+
+app.post('/api/admin/groups', adminAuth, async (req, res) => {
   try { await addGroup(req.body); res.json({ ok: true }); }
   catch (err) { res.status(400).json({ error: err.message }); }
 });
-app.patch('/api/admin/groups/:id',  adminAuth, async (req, res) => {
-  await toggleGroup(decodeURIComponent(req.params.id), req.body.active); res.json({ ok: true });
+
+app.patch('/api/admin/groups/:id', adminAuth, async (req, res) => {
+  await toggleGroup(decodeURIComponent(req.params.id), req.body.active);
+  res.json({ ok: true });
 });
+
 app.delete('/api/admin/groups/:id', adminAuth, async (req, res) => {
-  await removeGroup(decodeURIComponent(req.params.id)); res.json({ ok: true });
+  await removeGroup(decodeURIComponent(req.params.id));
+  res.json({ ok: true });
 });
 
 app.post('/api/admin/fetch-now', adminAuth, async (req, res) => {
@@ -380,7 +439,9 @@ app.post('/api/admin/fetch-now', adminAuth, async (req, res) => {
     const fetch = await fetchAllDueGroups(force);
     const processed = await processUnprocessedPosts();
     res.json({ ok: true, fetch, processed });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/admin/stats', adminAuth, async (req, res) => {
@@ -390,7 +451,7 @@ app.get('/api/admin/stats', adminAuth, async (req, res) => {
     db.collection('whatsapp_groups').countDocuments(),
     db.collection('users').countDocuments(),
     db.collection('scholarships').countDocuments({ published: true }),
-    db.collection('users').countDocuments({ plan: { $in: ['scholar','pro','agency'] } })
+    db.collection('users').countDocuments({ plan: { $in: ['scholar', 'pro', 'agency'] } })
   ]);
   res.json({ buffer, totalGroups, totalUsers, totalPublished, totalPaidUsers });
 });
@@ -399,16 +460,16 @@ app.get('/api/admin/scholarships', adminAuth, async (req, res) => {
   const db = getDb();
   const page = parseInt(req.query.page || '1');
   const scholarships = await db.collection('scholarships')
-    .find({}).sort({ createdAt: -1 }).skip((page-1)*20).limit(20).toArray();
+    .find({}).sort({ createdAt: -1 }).skip((page - 1) * 20).limit(20).toArray();
   res.json(scholarships);
 });
 
 app.post('/api/admin/post-now/:slug', adminAuth, async (req, res) => {
   const scholarship = await getBySlug(req.params.slug);
   if (!scholarship) return res.status(404).json({ error: 'Not found' });
-  const sendResult = await sendToGroupWithFallback(scholarship.whatsappText);
+  await sendToGroup(scholarship.whatsappText);
   await markPublished(scholarship.slug);
-  res.json({ ok: true, posted: scholarship.title, method: sendResult.method });
+  res.json({ ok: true, posted: scholarship.title });
 });
 
 // ── 404 + error handlers ──────────────────────────────────────────────────────
