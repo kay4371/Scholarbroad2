@@ -7,7 +7,7 @@
  * WhatsApp format: ScholarBroad branded, structured, emoji-guided.
  */
 
-const { validateOfficialUrl } = require('./officialUrlExtractor');
+const { validateOfficialUrl, resolveOfficialUrl } = require('./officialUrlExtractor');
 const Groq = require('groq-sdk');
 const axios = require('axios');
 const mongoService = require('./mongoService');
@@ -114,7 +114,7 @@ Return this exact JSON structure:
   "field": "Field of study or All Fields",
   "eligible": "Who can apply e.g. All Nationalities / African Students",
   "summary": "2-3 sentence human summary of the opportunity",
-  "whatsappText": "Format the message EXACTLY like this template (fill in real values, keep all emojis and labels):\\n\\n🎓 *SCHOLARSHIP ALERT* | ScholarBroad\\n\\n🏫 *{title}*\\n🌍 Country: {country} {flag}\\n📚 Level: {degree}\\n💰 Funding: {funding}\\n🗓 Deadline: {deadline}\\n✅ Eligible: {eligible}\\n📌 Field: {field}\\n\\n📝 {summary}\\n\\n━━━━━━━━━━━━━━━━━━━━━━\\n🔗 *Full Details & Apply:*\\n{LINK_PLACEHOLDER}\\n━━━━━━━━━━━━━━━━━━━━━━\\n\\n📲 Join ScholarBroad WhatsApp for daily alerts!\\n👉 https://chat.whatsapp.com/YOUR_GROUP_INVITE\\n\\n#ScholarBroad #Scholarship #{country}Scholarship",
+  "whatsappText": "Format the message EXACTLY like this template (fill in real values, keep all emojis and labels):\\n\\n🎓 *SCHOLARSHIP ALERT* | ScholarBroad\\n\\n🏫 *{title}*\\n🌍 Country: {country} {flag}\\n📚 Level: {degree}\\n💰 Funding: {funding}\\n🗓 Deadline: {deadline}\\n✅ Eligible: {eligible}\\n📌 Field: {field}\\n\\n📝 {summary}\\n\\n━━━━━━━━━━━━━━━━━━━━━━\\n🔗 *Full Details & Apply:*\\n{LINK_PLACEHOLDER}\\n━━━━━━━━━━━━━━━━━━━━━━\\n\\n📲 Join ScholarBroad WhatsApp for daily alerts!\\n👉 https://chat.whatsapp.com/CwtL9JqEFQOASutGpeYPlZ\\n\\n#ScholarBroad #Scholarship #{country}Scholarship",
   "officialUrl": "The ONE URL in the post that goes directly to a university, government body, or official scholarship foundation. Must NOT be scholarshipregion.com, opportunitydesk.org, brightscholarship.com, or any aggregator, social media, or link shortener. Return null if not found or not 100% certain.",
   "slug": "url-friendly-slug-max-60-chars"
 }`;
@@ -173,7 +173,7 @@ async function processUnprocessedPosts() {
         .replace('{LINK_PLACEHOLDER}', redirectUrl);
 
       // ── Validate official URL ──────────────────────────────────────────────
-      const officialUrl = validateOfficialUrl(structured.officialUrl);
+      const officialUrl = await resolveOfficialUrl(structured.officialUrl, post.rawText);
       if (officialUrl) {
         console.log(`[Groq] ✓ Official URL: ${officialUrl}`);
       } else {
