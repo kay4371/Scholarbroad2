@@ -265,13 +265,13 @@
     <span>›</span>
     <a href="/scholarships">Scholarships</a>
     <span>›</span>
-    <span id="breadcrumb-title">Chevening 2026</span>
+    <span id="breadcrumb-title">Loading...</span>
   </div>
 
   <!-- HERO CARD -->
   <div class="hero-card">
     <div class="hero-flag" id="s-flag">🇬🇧</div>
-    <div class="hero-title" id="s-title">Chevening Scholarship 2026 — United Kingdom</div>
+    <div class="hero-title" id="s-title">Loading scholarship...</div>
     <div class="hero-tags">
       <span class="tag tag-green" id="s-funding">💰 Fully Funded</span>
       <span class="tag tag-blue" id="s-degree">🎓 Masters</span>
@@ -496,14 +496,16 @@ function hydrate() {
     if (countryTag) countryTag.textContent = '🌍 ' + eligible;
 
     // Official application button — rawUrl & officialUrl already declared above
+    // ✅ Route Apply button through /go/:slug monetisation page
     const officialBtn = document.getElementById('official-link');
-    if (officialUrl) {
-      officialBtn.href      = officialUrl;
-      officialBtn.target    = '_blank';
-      officialBtn.rel       = 'noopener noreferrer';
+    const slug = s.slug || window.location.pathname.split('/s/')[1];
+    if (slug) {
+      officialBtn.href      = '/go/' + slug;
+      officialBtn.target    = '_self';
+      officialBtn.rel       = '';
       officialBtn.removeAttribute('onclick');
-      officialBtn.innerHTML = '🎓 Go to Official Application Page ↗';
-} else {
+      officialBtn.innerHTML = '🎓 Apply on School Website ↗';
+    } else {
       officialBtn.style.display = 'none';
     }
 
