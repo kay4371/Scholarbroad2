@@ -557,6 +557,24 @@ app.post('/api/admin/post-now/:slug', adminAuth, async (req, res) => {
   res.json({ ok: true, posted: scholarship.title, method: sendResult.method });
 });
 
+// ── Admin: manually trigger Masters pipeline for a user (for testing) ───────
+app.post('/api/admin/trigger-masters/:userId', adminAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const user = await getUserById(req.params.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const profile = await db.collection('user_profiles').findOne({ userId: req.params.userId });
+    await kickOffMastersPipeline(req.params.userId, {
+      name: user.name,
+      field: (profile && profile.field) || req.body.field || 'General',
+      country: (profile && profile.targetCountry) || req.body.country || '',
+      researchInterest: (profile && profile.researchInterest) || req.body.researchInterest || '',
+      degree: (profile && profile.degree) || req.body.degree || 'Masters'
+    });
+    res.json({ ok: true, message: 'Masters pipeline triggered for ' + user.name });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── 404 + error handlers ──────────────────────────────────────────────────────
 app.use((req, res) => res.status(404).json({ error: 'Not found', path: req.path }));
 app.use((err, req, res, next) => {
