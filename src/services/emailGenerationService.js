@@ -272,11 +272,47 @@ async function skipEmail(emailId, userId) {
   );
 }
 
+
+// ── Generate Personal Statement / SOP for Masters applicants ─────────────────
+async function generatePersonalStatement(name, field, country, interest, degree = 'Masters') {
+  const systemPrompt = `You are an expert academic writing assistant helping African students 
+write compelling Personal Statements for ${degree} scholarship applications. 
+Write in first person, natural human voice, 400-500 words. 
+Sound genuine, specific and motivated — never generic or AI-sounding.
+Focus on: why this field, why this country, what the student will contribute, future goals.`;
+
+  const userPrompt = `Write a Personal Statement for this student:
+Name: ${name}
+Degree applying for: ${degree}
+Field of study: ${field}
+Target country: ${country}
+Career/Academic interest: ${interest}
+
+Write 400-500 words. Return plain text only, no JSON, no headers.`;
+
+  try {
+    const response = await groq.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.65,
+      max_tokens: 900
+    });
+    return response.choices[0]?.message?.content?.trim() || '';
+  } catch (err) {
+    console.error('[EmailGen] Personal Statement error:', err.message);
+    return '';
+  }
+}
+
 module.exports = {
   generateEmailsForUser,
   generateColdEmail,
   generateFollowUpEmail,
   generateResearchProposal,
+  generatePersonalStatement,
   extractKeywords,
   getEmailQueue,
   approveEmail,
