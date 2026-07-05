@@ -9,7 +9,7 @@ const { fetchAllDueGroups, addGroup, toggleGroup, removeGroup, listGroups, seedD
 const { processUnprocessedPosts, getNextUnpublished, markPublished, trackClick, getBySlug, bufferCount, sendToGroupWithFallback } = require('./services/groqRewriteService');
 const { register, login, requireAuth, requirePlan, verifyAndUpgrade, getUserById } = require('./services/authService');
 const { discoverProfessors, getProfessorsForUser } = require('./services/professorSearchService');
-const { generateEmailsForUser, getEmailQueue, approveEmail, editEmail, skipEmail, generateResearchProposal, extractKeywords } = require('./services/emailGenerationService');
+const { generateEmailsForUser, getEmailQueue, approveEmail, editEmail, skipEmail, generateResearchProposal, generatePersonalStatement, extractKeywords } = require('./services/emailGenerationService');
 const { sendApprovedEmails, scheduleFollowUps, detectReplies, runDailySendCycle } = require('./services/followUpService');
 const { getAuthUrl, handleCallback, disconnectGmail } = require('./services/gmailOAuthService');
 
@@ -175,6 +175,8 @@ app.post('/api/payment/verify', async (req, res) => {
     await verifyAndUpgrade({ reference, userId: result.userId, plan });
     if (profileData.degree === 'PhD' && ['scholar','pro','agency'].includes(plan)) {
       kickOffPhDPipeline(result.userId, profileData).catch(console.error);
+    } else if (['Masters','MSc','MA','MBA','MPhil'].includes(profileData.degree) && ['scholar','pro','agency'].includes(plan)) {
+      kickOffMastersPipeline(result.userId, profileData).catch(console.error);
     }
     res.json({ ok: true, ...result });
   } catch (err) { res.status(400).json({ error: err.message }); }
@@ -197,6 +199,83 @@ async function kickOffPhDPipeline(userId, profileData) {
     });
   } catch (err) { console.error(`[Pipeline] Error:`, err.message); }
 }
+
+// ── Masters pipeline kickoff ─────────────────────────────────────────────────
+async function kickOffMastersPipeline(userId, profileData) {
+  const db = getDb();
+  try {
+    console.log(`[MastersPipeline] Starting for user ${userId}`);
+
+    // 1. Generate Personal Statement draft
+    const sop = await generatePersonalStatement(
+      profileData.name || 'Student',
+      profileData.field || '',
+      profileData.country || '',
+      profileData.researchInterest || profileData.field || '',
+      profileData.degree || 'Masters'
+    );
+
+    // 2. Find matching scholarships from DB by degree level
+    const degreeRegex = /masters|msc|ma|mba|mphil|postgraduate|all/i;
+    const matchedScholarships = await db.collection('scholarships').find({
+      published: true,
+      $or: [
+        { degree: { $regex: degreeRegex } },
+        { degree: 'All Levels' },
+        { degree: 'All' }
+      ]
+    }).sort({ createdAt: -1 }).limit(20).toArray();
+
+    // 3. Filter by country preference if provided
+    let filtered = matchedScholarships;
+    if (profileData.country) {
+      const countryMatch = matchedScholarships.filter(s =>
+        (s.country || '').toLowerCase().includes(profileData.country.toLowerCase()) ||
+        (s.eligible || '').toLowerCase().includes('all') ||
+        (s.eligible || '').toLowerCase().includes('international')
+      );
+      if (countryMatch.length >= 3) filtered = countryMatch;
+    }
+
+    // 4. Save to user profile
+    await db.collection('user_profiles').updateOne(
+      { userId },
+      { $set: {
+        personalStatement: sop,
+        matchedScholarships: filtered.map(s => ({
+          slug: s.slug,
+          title: s.title,
+          country: s.country,
+          flag: s.flag,
+          funding: s.funding,
+          deadline: s.deadline,
+          degree: s.degree,
+          field: s.field,
+          redirectUrl: s.redirectUrl
+        })),
+        pipelineType: 'masters',
+        pipelineStatus: 'ready',
+        updatedAt: new Date()
+      }},
+      { upsert: true }
+    );
+
+    // 5. Notify user
+    await db.collection('notifications').insertOne({
+      userId,
+      type: 'pipeline_ready',
+      message: `🎓 Your Personal Statement draft and ${filtered.length} matched scholarships are ready! Check your dashboard.`,
+      read: false,
+      createdAt: new Date()
+    });
+
+    console.log(`[MastersPipeline] ✓ Done for user ${userId} — ${filtered.length} scholarships matched`);
+  } catch (err) {
+    console.error(`[MastersPipeline] Error:`, err.message);
+  }
+}
+
+// ── Masters dashboard stats ───────────────────────────────────────────────────
 
 // ════════════════════════════════════════════════════════════════════════════
 // USER ROUTES
@@ -251,6 +330,73 @@ app.get('/api/user/dashboard-stats', requireAuth, async (req, res) => {
 
 app.get('/api/user/professors', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
   res.json(await getProfessorsForUser(req.user.userId, req.query));
+});
+
+// ── Masters: get matched scholarships ─────────────────────────────────────────
+app.get('/api/user/matched-scholarships', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+  try {
+    const db = getDb();
+    const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    if (!profile || profile.pipelineType !== 'masters') {
+      return res.status(400).json({ error: 'Masters profile not found' });
+    }
+    res.json({
+      ok: true,
+      scholarships: profile.matchedScholarships || [],
+      total: (profile.matchedScholarships || []).length
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Masters: get personal statement ──────────────────────────────────────────
+app.get('/api/user/personal-statement', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+  try {
+    const db = getDb();
+    const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    res.json({ ok: true, personalStatement: profile.personalStatement || '' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Masters: regenerate personal statement ────────────────────────────────────
+app.post('/api/user/personal-statement/regenerate', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+  try {
+    const db = getDb();
+    const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    const user = await getUserById(req.user.userId);
+    const sop = await generatePersonalStatement(
+      user.name || 'Student',
+      profile.field || '',
+      profile.targetCountry || '',
+      profile.researchInterest || profile.field || '',
+      profile.degree || 'Masters'
+    );
+    await db.collection('user_profiles').updateOne(
+      { userId: req.user.userId },
+      { $set: { personalStatement: sop, updatedAt: new Date() } }
+    );
+    res.json({ ok: true, personalStatement: sop });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Masters: refresh matched scholarships ─────────────────────────────────────
+app.post('/api/user/matched-scholarships/refresh', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+  try {
+    const db = getDb();
+    const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    const user = await getUserById(req.user.userId);
+    // Re-run matching
+    kickOffMastersPipeline(req.user.userId, {
+      name: user.name,
+      field: profile.field,
+      country: profile.targetCountry,
+      researchInterest: profile.researchInterest,
+      degree: profile.degree || 'Masters'
+    }).catch(console.error);
+    res.json({ ok: true, message: 'Refreshing matched scholarships — check back in a moment' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/user/discover-professors', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
