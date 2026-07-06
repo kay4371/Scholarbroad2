@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — ScholarBroad</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #06090f; --surface: #0f1623; --surface2: #1a2236;
+    --border: rgba(255,255,255,0.08); --text: #eef2ff; --muted: #7a8499;
+    --accent: #00e5a0; --accent2: #0095ff; --gold: #f5c518; --danger: #ff4d6d;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; min-height:100vh; }
+
+  /* LAYOUT */
+  .app { display:flex; min-height:100vh; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width:240px; background:var(--surface); border-right:1px solid var(--border);
+    display:flex; flex-direction:column; position:fixed; height:100vh; z-index:50;
+  }
+  .sidebar-logo { padding:24px 20px; font-family:'Syne',sans-serif; font-weight:800; font-size:18px; color:var(--accent); border-bottom:1px solid var(--border); }
+  .sidebar-logo span { color:var(--text); }
+  .sidebar-nav { flex:1; padding:16px 0; }
+  .nav-item {
+    display:flex; align-items:center; gap:12px; padding:11px 20px;
+    cursor:pointer; font-size:14px; color:var(--muted); transition:all .15s;
+    border-left:3px solid transparent;
+  }
+  .nav-item:hover { color:var(--text); background:rgba(255,255,255,0.03); }
+  .nav-item.active { color:var(--accent); border-left-color:var(--accent); background:rgba(0,229,160,0.06); }
+  .nav-icon { font-size:16px; width:20px; text-align:center; }
+  .nav-badge { margin-left:auto; background:var(--danger); color:#fff; font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; }
+  .sidebar-footer { padding:16px 20px; border-top:1px solid var(--border); }
+  .plan-chip { display:inline-flex; align-items:center; gap:6px; background:rgba(0,229,160,0.1); border:1px solid rgba(0,229,160,0.2); border-radius:20px; padding:4px 12px; font-size:11px; color:var(--accent); font-weight:600; margin-bottom:10px; }
+  .logout-btn { font-size:12px; color:var(--muted); cursor:pointer; background:none; border:none; }
+  .logout-btn:hover { color:var(--danger); }
+
+  /* MAIN */
+  .main { margin-left:240px; flex:1; padding:28px 32px; }
+
+  /* HEADER */
+  .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; }
+  .page-title { font-family:'Syne',sans-serif; font-weight:800; font-size:22px; }
+  .page-sub { font-size:13px; color:var(--muted); margin-top:3px; }
+  .auto-mode-row { display:flex; align-items:center; gap:12px; }
+  .auto-label { font-size:13px; color:var(--muted); }
+  .toggle { position:relative; width:44px; height:24px; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .toggle-slider {
+    position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0;
+    background:var(--surface2); border-radius:24px; transition:.3s;
+    border:1px solid var(--border);
+  }
+  .toggle-slider:before {
+    content:''; position:absolute; height:18px; width:18px; left:3px; bottom:2px;
+    background:var(--muted); border-radius:50%; transition:.3s;
+  }
+  .toggle input:checked + .toggle-slider { background:rgba(0,229,160,0.2); border-color:var(--accent); }
+  .toggle input:checked + .toggle-slider:before { transform:translateX(19px); background:var(--accent); }
+
+  /* STAT CARDS */
+  .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; }
+  .stat-label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+  .stat-value { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; }
+  .stat-value.green { color:var(--accent); }
+  .stat-value.gold { color:var(--gold); }
+  .stat-value.blue { color:var(--accent2); }
+  .stat-value.red { color:var(--danger); }
+  .stat-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+
+  /* SECTIONS */
+  .section { display:none; }
+  .section.active { display:block; }
+
+  /* CARDS */
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; margin-bottom:20px; }
+  .card-title { font-family:'Syne',sans-serif; font-weight:700; font-size:16px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; }
+  .card-title-actions { display:flex; gap:8px; }
+
+  /* BUTTONS */
+  .btn { display:inline-flex; align-items:center; gap:7px; padding:9px 18px; border-radius:8px; font-family:'DM Sans',sans-serif; font-weight:600; font-size:13px; cursor:pointer; border:none; transition:all .15s; text-decoration:none; }
+  .btn-primary { background:var(--accent); color:#000; }
+  .btn-primary:hover { background:#00c88a; }
+  .btn-ghost { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+  .btn-ghost:hover { border-color:var(--border); background:#212d42; }
+  .btn-danger { background:rgba(255,77,109,0.15); color:var(--danger); border:1px solid rgba(255,77,109,0.2); }
+  .btn-sm { padding:6px 12px; font-size:12px; }
+
+  /* PROFESSOR TABLE */
+  .table { width:100%; border-collapse:collapse; }
+  .table th { text-align:left; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; padding:10px 12px; border-bottom:1px solid var(--border); }
+  .table td { padding:12px; border-bottom:1px solid rgba(255,255,255,0.04); font-size:13px; vertical-align:top; }
+  .table tr:last-child td { border-bottom:none; }
+  .table tr:hover td { background:rgba(255,255,255,0.02); }
+  .fit-score { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; font-weight:700; font-size:13px; }
+  .fit-high { background:rgba(0,229,160,0.15); color:var(--accent); }
+  .fit-mid { background:rgba(245,197,24,0.15); color:var(--gold); }
+  .fit-low { background:rgba(255,77,109,0.15); color:var(--danger); }
+  .status-chip { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+  .status-pending { background:rgba(122,132,153,0.15); color:var(--muted); }
+  .status-sent { background:rgba(0,149,255,0.15); color:var(--accent2); }
+  .status-replied { background:rgba(0,229,160,0.15); color:var(--accent); }
+  .status-approved { background:rgba(245,197,24,0.15); color:var(--gold); }
+  .email-chip { display:inline-flex; align-items:center; gap:4px; font-size:11px; }
+  .email-found { color:var(--accent); }
+  .email-missing { color:var(--muted); }
+
+  /* EMAIL QUEUE */
+  .email-item { border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px; transition:border-color .15s; }
+  .email-item:hover { border-color:rgba(255,255,255,0.15); }
+  .email-prof { font-weight:600; font-size:14px; margin-bottom:3px; }
+  .email-uni { font-size:12px; color:var(--muted); margin-bottom:10px; }
+  .email-subject { font-size:13px; color:var(--accent2); margin-bottom:8px; }
+  .email-body { font-size:12px; color:#b0bcd4; line-height:1.6; max-height:80px; overflow:hidden; position:relative; }
+  .email-body.expanded { max-height:none; }
+  .email-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .edit-area { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:10px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:12px; line-height:1.6; resize:vertical; min-height:120px; margin-top:8px; display:none; }
+
+  /* SCHOLARSHIPS GRID */
+  .scholarships-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
+  .scholarship-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px; transition:border-color .15s; text-decoration:none; display:block; }
+  .scholarship-card:hover { border-color:rgba(0,229,160,0.3); }
+  .sch-flag { font-size:24px; margin-bottom:8px; }
+  .sch-title { font-family:'Syne',sans-serif; font-weight:700; font-size:14px; color:var(--text); margin-bottom:6px; line-height:1.3; }
+  .sch-meta { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .sch-tag { font-size:10px; padding:2px 8px; border-radius:10px; font-weight:600; }
+  .sch-tag-green { background:rgba(0,229,160,0.1); color:var(--accent); }
+  .sch-tag-blue { background:rgba(0,149,255,0.1); color:var(--accent2); }
+  .sch-tag-gold { background:rgba(245,197,24,0.1); color:var(--gold); }
+  .sch-deadline { font-size:11px; color:var(--muted); }
+  .apply-link { display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--accent); font-weight:600; margin-top:10px; }
+
+  /* SOP CARD */
+  .sop-box { background:var(--surface2); border-radius:10px; padding:18px; font-size:13px; line-height:1.8; color:#c0ccdd; white-space:pre-wrap; max-height:400px; overflow-y:auto; }
+  .sop-actions { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
+
+  /* NOTIFICATIONS */
+  .notif-item { display:flex; gap:12px; align-items:flex-start; padding:12px 0; border-bottom:1px solid var(--border); }
+  .notif-item:last-child { border-bottom:none; }
+  .notif-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex-shrink:0; margin-top:5px; }
+  .notif-dot.read { background:var(--muted); }
+  .notif-text { font-size:13px; flex:1; }
+  .notif-time { font-size:11px; color:var(--muted); }
+
+  /* EMPTY STATE */
+  .empty { text-align:center; padding:50px 20px; }
+  .empty-icon { font-size:48px; margin-bottom:16px; }
+  .empty-title { font-family:'Syne',sans-serif; font-weight:700; font-size:18px; margin-bottom:8px; }
+  .empty-sub { font-size:14px; color:var(--muted); margin-bottom:20px; }
+
+  /* LOADING */
+  .loading { text-align:center; padding:40px; color:var(--muted); font-size:14px; }
+  .spinner { display:inline-block; width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; margin-right:8px; vertical-align:middle; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* MOBILE */
+  @media(max-width:768px) {
+    .sidebar { width:200px; }
+    .main { margin-left:200px; padding:20px 16px; }
+    .stats-grid { grid-template-columns:repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-logo">Scholar<span>Broad</span></div>
+    <nav class="sidebar-nav" id="nav">
+      <div class="nav-item active" onclick="showSection('overview')" data-section="overview">
+        <span class="nav-icon">📊</span> Overview
+      </div>
+      <div class="nav-item" onclick="showSection('scholarships')" data-section="scholarships" id="nav-scholarships" style="display:none">
+        <span class="nav-icon">🎓</span> My Scholarships
+      </div>
+      <div class="nav-item" onclick="showSection('sop')" data-section="sop" id="nav-sop" style="display:none">
+        <span class="nav-icon">📝</span> Personal Statement
+      </div>
+      <div class="nav-item" onclick="showSection('professors')" data-section="professors" id="nav-professors" style="display:none">
+        <span class="nav-icon">👨‍🏫</span> Professors
+      </div>
+      <div class="nav-item" onclick="showSection('emails')" data-section="emails" id="nav-emails" style="display:none">
+        <span class="nav-icon">✉️</span> Email Queue
+        <span class="nav-badge" id="badge-emails" style="display:none">0</span>
+      </div>
+      <div class="nav-item" onclick="showSection('notifications')" data-section="notifications">
+        <span class="nav-icon">🔔</span> Notifications
+        <span class="nav-badge" id="badge-notifs" style="display:none">0</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="plan-chip" id="plan-chip">⭐ Free</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px" id="user-name-display">—</div>
+      <button class="logout-btn" onclick="logout()">← Sign out</button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+
+    <!-- PAGE HEADER -->
+    <div class="page-header">
+      <div>
+        <div class="page-title" id="page-title">Dashboard</div>
+        <div class="page-sub" id="page-sub">Welcome back</div>
+      </div>
+      <div class="auto-mode-row" id="auto-mode-row" style="display:none">
+        <span class="auto-label">Auto Mode</span>
+        <label class="toggle">
+          <input type="checkbox" id="auto-toggle" onchange="toggleAutoMode(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+        <span id="auto-mode-status" style="font-size:12px;color:var(--muted)">Off — you review emails before sending</span>
+      </div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Scholarships</div>
+        <div class="stat-value green" id="stat-scholarships">—</div>
+        <div class="stat-sub">matched for you</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Professors</div>
+        <div class="stat-value blue" id="stat-profs">—</div>
+        <div class="stat-sub">discovered</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Emails Sent</div>
+        <div class="stat-value gold" id="stat-sent">—</div>
+        <div class="stat-sub">to professors</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Replies</div>
+        <div class="stat-value red" id="stat-replies">—</div>
+        <div class="stat-sub">professors replied</div>
+      </div>
+    </div>
+
+    <!-- OVERVIEW SECTION -->
+    <div class="section active" id="section-overview">
+      <div class="card">
+        <div class="card-title">🚀 Your Pipeline Status</div>
+        <div id="pipeline-status">
+          <div class="loading"><span class="spinner"></span>Loading your status...</div>
+        </div>
+      </div>
+      <div class="card" id="notif-preview-card">
+        <div class="card-title">🔔 Recent Notifications <a class="btn btn-ghost btn-sm" onclick="showSection('notifications')">View all</a></div>
+        <div id="notif-preview"><div class="loading"><span class="spinner"></span>Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- SCHOLARSHIPS SECTION -->
+    <div class="section" id="section-scholarships">
+      <div class="card">
+        <div class="card-title">
+          🎓 Matched Scholarships
+          <div class="card-title-actions">
+            <button class="btn btn-ghost btn-sm" onclick="refreshScholarships()">↻ Refresh</button>
+          </div>
+        </div>
+        <div id="scholarships-content"><div class="loading"><span class="spinner"></span>Loading scholarships...</div></div>
+      </div>
+    </div>
+
+    <!-- SOP SECTION -->
+    <div class="section" id="section-sop">
+      <div class="card">
+        <div class="card-title">
+          📝 Your Personal Statement
+          <div class="card-title-actions">
+            <button class="btn btn-ghost btn-sm" onclick="regenerateSOP()">✨ Regenerate</button>
+            <button class="btn btn-ghost btn-sm" onclick="copySOP()">📋 Copy</button>
+          </div>
+        </div>
+        <div id="sop-content"><div class="loading"><span class="spinner"></span>Loading your statement...</div></div>
+        <div style="margin-top:12px;padding:12px;background:rgba(0,149,255,0.08);border-radius:8px;font-size:12px;color:#7ec8ff">
+          💡 This is an AI-generated draft. Edit it to add your personal details, specific experiences, and exact motivations before submitting to universities.
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFESSORS SECTION -->
+    <div class="section" id="section-professors">
+      <div class="card">
+        <div class="card-title">
+          👨‍🏫 Discovered Professors
+          <div class="card-title-actions">
+            <button class="btn btn-ghost btn-sm" onclick="loadProfessors()">↻ Refresh</button>
+          </div>
+        </div>
+        <div id="professors-content"><div class="loading"><span class="spinner"></span>Loading professors...</div></div>
+      </div>
+    </div>
+
+    <!-- EMAILS SECTION -->
+    <div class="section" id="section-emails">
+      <div class="card">
+        <div class="card-title">
+          ✉️ Email Queue
+          <div class="card-title-actions">
+            <button class="btn btn-primary btn-sm" onclick="approveAll()">✓ Approve All</button>
+            <button class="btn btn-ghost btn-sm" onclick="loadEmails()">↻ Refresh</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="filterEmails('pending_review')">⏳ Pending</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterEmails('approved')">✓ Approved</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterEmails('sent')">📤 Sent</button>
+          <button class="btn btn-ghost btn-sm" onclick="filterEmails(null)">All</button>
+        </div>
+        <div id="emails-content"><div class="loading"><span class="spinner"></span>Loading emails...</div></div>
+      </div>
+    </div>
+
+    <!-- NOTIFICATIONS SECTION -->
+    <div class="section" id="section-notifications">
+      <div class="card">
+        <div class="card-title">🔔 Notifications</div>
+        <div id="notifications-content"><div class="loading"><span class="spinner"></span>Loading...</div></div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+const API = '';
+let token = localStorage.getItem('sb_token');
+let userPlan = 'free';
+let pipelineType = null;
+let autoMode = false;
+
+// ── Auth guard ────────────────────────────────────────────────────────────────
+if (!token) window.location.href = '/subscribe';
+
+function authHeaders() {
+  return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+}
+
+function logout() {
+  localStorage.removeItem('sb_token');
+  window.location.href = '/subscribe';
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('section-' + name).classList.add('active');
+  document.querySelector(`[data-section="${name}"]`).classList.add('active');
+
+  // Lazy load on first visit
+  if (name === 'scholarships') loadScholarships();
+  if (name === 'sop') loadSOP();
+  if (name === 'professors') loadProfessors();
+  if (name === 'emails') loadEmails();
+  if (name === 'notifications') loadNotifications();
+}
+
+// ── Initialise ────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const [profileRes, statsRes] = await Promise.all([
+      fetch(API + '/api/user/profile', { headers: authHeaders() }),
+      fetch(API + '/api/user/dashboard-stats', { headers: authHeaders() })
+    ]);
+
+    if (profileRes.status === 401) { logout(); return; }
+
+    const profile = await profileRes.json();
+    const stats = await statsRes.json();
+
+    // Set user info
+    userPlan = profile.plan || 'free';
+    pipelineType = profile.profile?.pipelineType || null;
+    autoMode = profile.profile?.autoMode || false;
+
+    document.getElementById('user-name-display').textContent = profile.name || '';
+    document.getElementById('page-sub').textContent = 'Welcome back, ' + (profile.name || '');
+    document.getElementById('plan-chip').textContent = '⭐ ' + (userPlan.charAt(0).toUpperCase() + userPlan.slice(1));
+
+    // Stats
+    document.getElementById('stat-profs').textContent = stats.totalProfs || 0;
+    document.getElementById('stat-sent').textContent = stats.emailsSent || 0;
+    document.getElementById('stat-replies').textContent = stats.replies || 0;
+
+    // Show/hide nav items based on pipeline type
+    if (pipelineType === 'masters') {
+      document.getElementById('nav-scholarships').style.display = 'flex';
+      document.getElementById('nav-sop').style.display = 'flex';
+      document.getElementById('stat-scholarships').textContent = profile.profile?.matchedScholarships?.length || 0;
+    } else if (pipelineType === 'phd') {
+      document.getElementById('nav-professors').style.display = 'flex';
+      document.getElementById('nav-emails').style.display = 'flex';
+      document.getElementById('stat-scholarships').textContent = '—';
+      // Auto mode toggle for PhD users
+      document.getElementById('auto-mode-row').style.display = 'flex';
+      document.getElementById('auto-toggle').checked = autoMode;
+      document.getElementById('auto-mode-status').textContent = autoMode
+        ? 'On — emails sent automatically'
+        : 'Off — you review emails before sending';
+    }
+
+    // Notifications badge
+    const unread = (stats.notifications || []).filter(n => !n.read).length;
+    if (unread > 0) {
+      document.getElementById('badge-notifs').textContent = unread;
+      document.getElementById('badge-notifs').style.display = 'inline-block';
+    }
+
+    // Pending emails badge
+    if (stats.pendingApproval > 0) {
+      document.getElementById('badge-emails').textContent = stats.pendingApproval;
+      document.getElementById('badge-emails').style.display = 'inline-block';
+    }
+
+    // Pipeline status
+    renderPipelineStatus(profile, stats);
+
+    // Notification preview
+    renderNotifPreview(stats.notifications || []);
+
+  } catch (err) {
+    console.error('Init error:', err);
+  }
+}
+
+// ── Pipeline status card ──────────────────────────────────────────────────────
+function renderPipelineStatus(profile, stats) {
+  const el = document.getElementById('pipeline-status');
+  const status = profile.profile?.pipelineStatus;
+  const plan = userPlan;
+
+  if (plan === 'free') {
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="font-size:36px">🌱</div>
+        <div>
+          <div style="font-weight:600;margin-bottom:4px">You're on the Free plan</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Upgrade to unlock professor discovery, email automation, and personal statement generation.</div>
+          <a href="/subscribe" class="btn btn-primary">Upgrade Now →</a>
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (!status || status === 'pending') {
+    el.innerHTML = `<div class="loading"><span class="spinner"></span>Setting up your pipeline... Check back in a few minutes.</div>`;
+    return;
+  }
+
+  if (pipelineType === 'masters') {
+    const count = profile.profile?.matchedScholarships?.length || 0;
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">🎓</div>
+          <div style="font-weight:700;font-size:18px;color:var(--accent)">${count}</div>
+          <div style="font-size:11px;color:var(--muted)">Scholarships matched</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">📝</div>
+          <div style="font-weight:700;font-size:18px;color:var(--gold)">${profile.profile?.personalStatement ? 'Ready' : '—'}</div>
+          <div style="font-size:11px;color:var(--muted)">Personal Statement</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">🚀</div>
+          <div style="font-weight:700;font-size:18px;color:var(--accent2)">Active</div>
+          <div style="font-size:11px;color:var(--muted)">Pipeline status</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px">
+        <button class="btn btn-primary" onclick="showSection('scholarships')">View Scholarships →</button>
+        <button class="btn btn-ghost" onclick="showSection('sop')">View Personal Statement</button>
+      </div>`;
+  } else {
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">👨‍🏫</div>
+          <div style="font-weight:700;font-size:18px;color:var(--accent)">${stats.totalProfs || 0}</div>
+          <div style="font-size:11px;color:var(--muted)">Professors discovered</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">📤</div>
+          <div style="font-weight:700;font-size:18px;color:var(--gold)">${stats.emailsSent || 0}</div>
+          <div style="font-size:11px;color:var(--muted)">Emails sent</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:24px;margin-bottom:6px">💬</div>
+          <div style="font-weight:700;font-size:18px;color:var(--accent2)">${stats.replies || 0}</div>
+          <div style="font-size:11px;color:var(--muted)">Professor replies</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="showSection('emails')">Review Emails (${stats.pendingApproval || 0} pending) →</button>
+        <button class="btn btn-ghost" onclick="showSection('professors')">View Professors</button>
+      </div>`;
+  }
+}
+
+// ── Auto mode toggle ──────────────────────────────────────────────────────────
+async function toggleAutoMode(enabled) {
+  try {
+    await fetch(API + '/api/user/auto-mode', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ enabled })
+    });
+    document.getElementById('auto-mode-status').textContent = enabled
+      ? 'On — emails sent automatically without your review'
+      : 'Off — you review emails before sending';
+    autoMode = enabled;
+  } catch (err) { console.error('Auto mode error:', err); }
+}
+
+// ── Scholarships ──────────────────────────────────────────────────────────────
+async function loadScholarships() {
+  const el = document.getElementById('scholarships-content');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>Loading...</div>';
+  try {
+    const res = await fetch(API + '/api/user/matched-scholarships', { headers: authHeaders() });
+    const data = await res.json();
+    if (!data.ok || !data.scholarships?.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">🎓</div><div class="empty-title">No scholarships matched yet</div><div class="empty-sub">Your matches will appear here once your profile is processed.</div></div>`;
+      return;
+    }
+    el.innerHTML = `<div class="scholarships-grid">${data.scholarships.map(s => `
+      <a href="/s/${s.slug}" class="scholarship-card">
+        <div class="sch-flag">${s.flag || '🌍'}</div>
+        <div class="sch-title">${s.title}</div>
+        <div class="sch-meta">
+          <span class="sch-tag sch-tag-green">${s.funding || 'See details'}</span>
+          <span class="sch-tag sch-tag-blue">${s.degree || 'Various'}</span>
+          ${s.country ? `<span class="sch-tag sch-tag-gold">${s.country}</span>` : ''}
+        </div>
+        <div class="sch-deadline">🗓 ${s.deadline || 'Check website'}</div>
+        <div class="apply-link">View & Apply →</div>
+      </a>`).join('')}</div>`;
+  } catch (err) {
+    el.innerHTML = '<div class="empty"><div class="empty-title">Error loading scholarships</div></div>';
+  }
+}
+
+async function refreshScholarships() {
+  await fetch(API + '/api/user/matched-scholarships/refresh', { method: 'POST', headers: authHeaders() });
+  setTimeout(loadScholarships, 3000);
+}
+
+// ── SOP ───────────────────────────────────────────────────────────────────────
+async function loadSOP() {
+  const el = document.getElementById('sop-content');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>Loading your statement...</div>';
+  try {
+    const res = await fetch(API + '/api/user/personal-statement', { headers: authHeaders() });
+    const data = await res.json();
+    if (!data.personalStatement) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">📝</div><div class="empty-title">No statement yet</div><div class="empty-sub">Your Personal Statement will be generated automatically after signup.</div><button class="btn btn-primary" onclick="regenerateSOP()">Generate Now</button></div>`;
+      return;
+    }
+    el.innerHTML = `<div class="sop-box">${data.personalStatement}</div>`;
+  } catch (err) {
+    el.innerHTML = '<div class="empty"><div class="empty-title">Error loading statement</div></div>';
+  }
+}
+
+async function regenerateSOP() {
+  document.getElementById('sop-content').innerHTML = '<div class="loading"><span class="spinner"></span>Generating new statement (this takes ~30 seconds)...</div>';
+  try {
+    const res = await fetch(API + '/api/user/personal-statement/regenerate', { method: 'POST', headers: authHeaders() });
+    const data = await res.json();
+    document.getElementById('sop-content').innerHTML = `<div class="sop-box">${data.personalStatement}</div>`;
+  } catch (err) {
+    document.getElementById('sop-content').innerHTML = '<div class="empty"><div class="empty-title">Error generating statement</div></div>';
+  }
+}
+
+function copySOP() {
+  const text = document.querySelector('.sop-box')?.textContent;
+  if (text) navigator.clipboard.writeText(text).then(() => alert('Personal Statement copied to clipboard!'));
+}
+
+// ── Professors ────────────────────────────────────────────────────────────────
+async function loadProfessors() {
+  const el = document.getElementById('professors-content');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>Loading professors...</div>';
+  try {
+    const res = await fetch(API + '/api/user/professors', { headers: authHeaders() });
+    const data = await res.json();
+    if (!data.professors?.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">👨‍🏫</div><div class="empty-title">No professors discovered yet</div><div class="empty-sub">Professor discovery runs automatically after you subscribe. It may take a few minutes.</div><button class="btn btn-primary" onclick="discoverProfessors()">Discover Now</button></div>`;
+      return;
+    }
+    el.innerHTML = `
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${data.total} professors discovered · Page ${data.pages ? 1 : 1} of ${data.pages || 1}</div>
+      <table class="table">
+        <thead><tr>
+          <th>Professor</th><th>University</th><th>Fit</th><th>Email</th><th>Status</th>
+        </tr></thead>
+        <tbody>${data.professors.map(p => `
+          <tr>
+            <td><div style="font-weight:600">${p.name}</div><div style="font-size:11px;color:var(--muted)">${(p.recentPapers||[]).slice(0,1).map(r=>r.title).join('')}</div></td>
+            <td style="font-size:12px">${p.university}</td>
+            <td><span class="fit-score ${p.fitScore>=7?'fit-high':p.fitScore>=4?'fit-mid':'fit-low'}">${p.fitScore}</span></td>
+            <td><span class="email-chip ${p.email?'email-found':'email-missing'}">${p.email?'✓ Found':'✗ None'}</span></td>
+            <td><span class="status-chip status-${p.status||'pending'}">${p.status||'pending'}</span></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (err) {
+    el.innerHTML = '<div class="empty"><div class="empty-title">Error loading professors</div></div>';
+  }
+}
+
+async function discoverProfessors() {
+  await fetch(API + '/api/user/discover-professors', { method: 'POST', headers: authHeaders() });
+  setTimeout(loadProfessors, 5000);
+}
+
+// ── Emails ────────────────────────────────────────────────────────────────────
+let currentEmailFilter = null;
+async function loadEmails(status = currentEmailFilter) {
+  currentEmailFilter = status;
+  const el = document.getElementById('emails-content');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>Loading emails...</div>';
+  try {
+    const url = API + '/api/user/email-queue' + (status ? '?status=' + status : '');
+    const res = await fetch(url, { headers: authHeaders() });
+    const emails = await res.json();
+    if (!emails.length) {
+      el.innerHTML = `<div class="empty"><div class="empty-icon">✉️</div><div class="empty-title">No emails ${status||''}</div><div class="empty-sub">Emails will appear here once professors are discovered and emails are generated.</div></div>`;
+      return;
+    }
+    el.innerHTML = emails.map(e => `
+      <div class="email-item" id="email-${e._id}">
+        <div class="email-prof">${e.professorName}</div>
+        <div class="email-uni">${e.university} · <span class="status-chip status-${e.status}">${e.status}</span> · Score: ${e.fitScore||'—'}/10</div>
+        <div class="email-subject">📧 ${e.subject}</div>
+        <div class="email-body" id="body-${e._id}">${e.body}</div>
+        <textarea class="edit-area" id="edit-${e._id}">${e.body}</textarea>
+        <div class="email-actions">
+          ${e.status === 'pending_review' ? `
+            <button class="btn btn-primary btn-sm" onclick="approveEmail('${e._id}')">✓ Approve</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleEdit('${e._id}')">✏️ Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="skipEmail('${e._id}')">✗ Skip</button>
+          ` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="toggleBody('${e._id}')" style="margin-left:auto">Read more</button>
+        </div>
+      </div>`).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="empty"><div class="empty-title">Error loading emails</div></div>';
+  }
+}
+
+function filterEmails(status) { loadEmails(status); }
+function toggleBody(id) {
+  const el = document.getElementById('body-' + id);
+  el.classList.toggle('expanded');
+}
+function toggleEdit(id) {
+  const editEl = document.getElementById('edit-' + id);
+  const bodyEl = document.getElementById('body-' + id);
+  const showing = editEl.style.display === 'block';
+  editEl.style.display = showing ? 'none' : 'block';
+  bodyEl.style.display = showing ? 'block' : 'none';
+  if (!showing) {
+    editEl.nextElementSibling.querySelector('button:first-child').textContent = '💾 Save';
+    editEl.nextElementSibling.querySelector('button:first-child').onclick = () => saveEdit(id);
+  }
+}
+async function saveEdit(id) {
+  const body = document.getElementById('edit-' + id).value;
+  await fetch(API + '/api/user/email-queue/' + id + '/edit', {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ body })
+  });
+  loadEmails();
+}
+async function approveEmail(id) {
+  await fetch(API + '/api/user/email-queue/' + id + '/approve', { method: 'POST', headers: authHeaders() });
+  document.getElementById('email-' + id).style.opacity = '0.4';
+  setTimeout(loadEmails, 500);
+}
+async function skipEmail(id) {
+  await fetch(API + '/api/user/email-queue/' + id + '/skip', { method: 'POST', headers: authHeaders() });
+  document.getElementById('email-' + id).remove();
+}
+async function approveAll() {
+  if (!confirm('Approve all pending emails? They will be sent automatically.')) return;
+  await fetch(API + '/api/user/email-queue/approve-all', { method: 'POST', headers: authHeaders() });
+  loadEmails();
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+async function loadNotifications() {
+  const el = document.getElementById('notifications-content');
+  el.innerHTML = '<div class="loading"><span class="spinner"></span>Loading...</div>';
+  try {
+    const res = await fetch(API + '/api/user/dashboard-stats', { headers: authHeaders() });
+    const data = await res.json();
+    const notifs = data.notifications || [];
+    if (!notifs.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">🔔</div><div class="empty-title">No notifications</div></div>';
+      return;
+    }
+    el.innerHTML = notifs.map(n => `
+      <div class="notif-item">
+        <div class="notif-dot ${n.read?'read':''}"></div>
+        <div class="notif-text">${n.message}</div>
+        <div class="notif-time">${new Date(n.createdAt).toLocaleDateString()}</div>
+      </div>`).join('');
+  } catch (err) {
+    el.innerHTML = '<div class="empty"><div class="empty-title">Error loading notifications</div></div>';
+  }
+}
+
+function renderNotifPreview(notifs) {
+  const el = document.getElementById('notif-preview');
+  if (!notifs.length) { el.innerHTML = '<div style="font-size:13px;color:var(--muted)">No new notifications</div>'; return; }
+  el.innerHTML = notifs.slice(0, 3).map(n => `
+    <div class="notif-item">
+      <div class="notif-dot ${n.read?'read':''}"></div>
+      <div class="notif-text">${n.message}</div>
+      <div class="notif-time">${new Date(n.createdAt).toLocaleDateString()}</div>
+    </div>`).join('');
+}
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
