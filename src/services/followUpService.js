@@ -30,6 +30,16 @@ async function sendApprovedEmails(userId) {
     return { sent: 0, reason: 'daily_limit_reached' };
   }
 
+  // Check if user has autoMode enabled — if so, auto-approve pending emails first
+  const userProfile = await db.collection('user_profiles').findOne({ userId });
+  if (userProfile?.autoMode === true) {
+    await db.collection('email_queue').updateMany(
+      { userId, status: 'pending_review' },
+      { $set: { status: 'approved', approvedAt: new Date(), autoApproved: true } }
+    );
+    console.log(`[Sender] Auto mode ON for user ${userId} — auto-approved pending emails`);
+  }
+
   // Get approved emails not yet sent
   const approved = await db.collection('email_queue')
     .find({ userId, status: 'approved', type: 'cold_email' })
