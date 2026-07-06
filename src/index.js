@@ -39,6 +39,7 @@ function adminAuth(req, res, next) {
 app.get('/subscribe', (req, res) => res.sendFile(path.join(__dirname, 'public/subscribe.html')));
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public/dashboard.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public/admin-dashboard.html')));
+app.get('/join', (req, res) => res.redirect('https://chat.whatsapp.com/CwtL9JqEFQOASutGpeYPlZ'));
 
 // ── Scholarship landing page (/s/:slug) ───────────────────────────────────────
 app.get('/s/:slug', async (req, res) => {
@@ -440,6 +441,21 @@ app.post('/api/user/notifications/:id/read', requireAuth, async (req, res) => {
     { $set: { read: true } }
   );
   res.json({ ok: true });
+});
+
+// ── Auto mode toggle ──────────────────────────────────────────────────────────
+app.post('/api/user/auto-mode', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+  try {
+    const db = getDb();
+    const { enabled } = req.body;
+    await db.collection('user_profiles').updateOne(
+      { userId: req.user.userId },
+      { $set: { autoMode: !!enabled, updatedAt: new Date() } },
+      { upsert: true }
+    );
+    console.log(`[AutoMode] User ${req.user.userId} set autoMode=${!!enabled}`);
+    res.json({ ok: true, autoMode: !!enabled });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
