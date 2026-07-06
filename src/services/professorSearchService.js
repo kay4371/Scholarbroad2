@@ -1,18 +1,241 @@
+/**
+ * professorSearchService.js
+ *
+ * Professor email resolution — 4-layer fallback:
+ * Layer 1: Semantic Scholar author profile (has email field sometimes)
+ * Layer 2: Google Scholar profile page scrape
+ * Layer 3: University faculty directory page scrape
+ * Layer 4: General web search (Google/Bing) for name + university + email
+ */
+
 const axios = require('axios');
 const cheerio = require('cheerio');
-//const { getDb } = require('./mongoService');
 const mongoService = require('./mongoService');
 const getDb = () => mongoService.db;
-const SEMANTIC_SCHOLAR_BASE = 'https://api.semanticscholar.org/graph/v1';
-const REQUEST_DELAY_MS = 2000; // polite delay between requests
 
+const SEMANTIC_SCHOLAR_BASE = 'https://api.semanticscholar.org/graph/v1';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ── Search Semantic Scholar for professors by keywords + country ──────────────
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+  'Accept-Language': 'en-US,en;q=0.5'
+};
+
+// Academic email pattern
+const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.(edu|ac\.[a-z]{2,4}|uni\-[a-z]+\.de|[a-z]{2,6})/g;
+
+function cleanEmails(text, name = '') {
+  const found = text.match(EMAIL_REGEX) || [];
+  const namePart = name.split(' ').pop().toLowerCase(); // last name
+  return found.filter(e => {
+    const lower = e.toLowerCase();
+    // Must look academic
+    if (!lower.includes('.edu') && !lower.includes('.ac.') && !lower.includes('uni-') &&
+        !lower.includes('.gov') && !lower.includes('.org')) return false;
+    // Reject generic/system emails
+    if (/noreply|no-reply|example|admin|info@|support@|webmaster|donotreply/.test(lower)) return false;
+    return true;
+  }).sort((a, b) => {
+    // Prefer emails that contain the professor's last name
+    const aScore = a.toLowerCase().includes(namePart) ? 1 : 0;
+    const bScore = b.toLowerCase().includes(namePart) ? 1 : 0;
+    return bScore - aScore;
+  });
+}
+
+// ── Layer 1: Semantic Scholar author profile ──────────────────────────────────
+async function trySemanticScholarEmail(authorId) {
+  try {
+    const res = await axios.get(`${SEMANTIC_SCHOLAR_BASE}/author/${authorId}`, {
+      params: { fields: 'homepage,externalIds' },
+      headers: { 'User-Agent': 'ScholarBroad/1.0' },
+      timeout: 8000
+    });
+    const data = res.data;
+    // Sometimes homepage contains email or links to faculty page
+    if (data.homepage) return { email: null, homepage: data.homepage };
+    return null;
+  } catch { return null; }
+}
+
+// ── Layer 2: Google Scholar profile scrape ────────────────────────────────────
+async function tryGoogleScholar(name, university) {
+  try {
+    await sleep(2000);
+    const query = encodeURIComponent(`${name} ${university} site:scholar.google.com`);
+    const searchUrl = `https://scholar.google.com/scholar?q=${encodeURIComponent(name + ' ' + university)}`;
+
+    const res = await axios.get(searchUrl, { headers: HEADERS, timeout: 10000 });
+    const $ = cheerio.load(res.data);
+
+    // Look for profile links
+    let profileUrl = null;
+    $('a').each((i, el) => {
+      const href = $(el).attr('href') || '';
+      if (href.includes('scholar.google.com/citations?user=')) {
+        profileUrl = href.startsWith('http') ? href : 'https://scholar.google.com' + href;
+        return false;
+      }
+    });
+
+    if (!profileUrl) return null;
+
+    // Fetch the profile page
+    await sleep(1500);
+    const profileRes = await axios.get(profileUrl, { headers: HEADERS, timeout: 10000 });
+    const $p = cheerio.load(profileRes.data);
+    const text = $p('body').text();
+    const emails = cleanEmails(text, name);
+    if (emails.length > 0) {
+      console.log(`[ProfEmail] L2 Google Scholar found: ${emails[0]} for ${name}`);
+      return emails[0];
+    }
+
+    // Check if profile has a homepage link
+    let homepage = null;
+    $p('a').each((i, el) => {
+      const href = $(el).attr('href') || '';
+      if (href.startsWith('http') && !href.includes('google.com') && !href.includes('scholar')) {
+        homepage = href;
+        return false;
+      }
+    });
+    return homepage ? { homepage } : null;
+  } catch (err) {
+    console.log(`[ProfEmail] L2 Google Scholar failed for ${name}: ${err.message}`);
+    return null;
+  }
+}
+
+// ── Layer 3: University faculty directory page ────────────────────────────────
+async function tryUniversityDirectory(name, university, homepage = null) {
+  try {
+    await sleep(2000);
+
+    // Try homepage first if we have it
+    if (homepage && homepage.startsWith('http')) {
+      const res = await axios.get(homepage, { headers: HEADERS, timeout: 10000, maxRedirects: 5 });
+      const $ = cheerio.load(res.data);
+      const text = $('body').text();
+      const emails = cleanEmails(text, name);
+      if (emails.length > 0) {
+        console.log(`[ProfEmail] L3 Homepage found: ${emails[0]} for ${name}`);
+        return emails[0];
+      }
+    }
+
+    // Try to find university domain and search faculty page
+    const uniQuery = encodeURIComponent(`${name} faculty ${university}`);
+    const searchUrl = `https://www.google.com/search?q=${uniQuery}`;
+
+    const searchRes = await axios.get(searchUrl, { headers: HEADERS, timeout: 10000 });
+    const $s = cheerio.load(searchRes.data);
+
+    // Find university domain links
+    const universityLinks = [];
+    $s('a[href]').each((i, el) => {
+      const href = $s(el).attr('href') || '';
+      if (href.includes('/url?q=')) {
+        const match = href.match(/\/url\?q=([^&]+)/);
+        if (match) {
+          const url = decodeURIComponent(match[1]);
+          if (url.includes('.edu') || url.includes('.ac.')) {
+            universityLinks.push(url);
+          }
+        }
+      }
+    });
+
+    // Try first 2 university links
+    for (const link of universityLinks.slice(0, 2)) {
+      try {
+        await sleep(1500);
+        const pageRes = await axios.get(link, { headers: HEADERS, timeout: 10000, maxRedirects: 3 });
+        const $page = cheerio.load(pageRes.data);
+        const text = $page('body').text();
+        const emails = cleanEmails(text, name);
+        if (emails.length > 0) {
+          console.log(`[ProfEmail] L3 University page found: ${emails[0]} for ${name}`);
+          return emails[0];
+        }
+      } catch {}
+    }
+
+    return null;
+  } catch (err) {
+    console.log(`[ProfEmail] L3 University directory failed for ${name}: ${err.message}`);
+    return null;
+  }
+}
+
+// ── Layer 4: General web search for email ─────────────────────────────────────
+async function tryGeneralWebSearch(name, university) {
+  try {
+    await sleep(2500);
+    const queries = [
+      `"${name}" "${university}" email`,
+      `"${name}" professor email ${university.split(' ')[0]}`,
+      `${name} ${university} contact email`
+    ];
+
+    for (const q of queries) {
+      try {
+        const url = `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+        const res = await axios.get(url, { headers: HEADERS, timeout: 10000 });
+        const $ = cheerio.load(res.data);
+        const text = $('body').text();
+        const emails = cleanEmails(text, name);
+        if (emails.length > 0) {
+          console.log(`[ProfEmail] L4 Web search found: ${emails[0]} for ${name}`);
+          return emails[0];
+        }
+        await sleep(1000);
+      } catch {}
+    }
+    return null;
+  } catch (err) {
+    console.log(`[ProfEmail] L4 Web search failed for ${name}: ${err.message}`);
+    return null;
+  }
+}
+
+// ── Main: 4-layer email resolution ───────────────────────────────────────────
+async function findProfessorEmail(name, university, authorId = null) {
+  console.log(`[ProfEmail] Resolving email for ${name} @ ${university}`);
+
+  // Layer 1: Semantic Scholar
+  if (authorId) {
+    const ssResult = await trySemanticScholarEmail(authorId);
+    if (ssResult && typeof ssResult === 'string') return ssResult;
+    // If we got a homepage, pass it to layer 3
+    if (ssResult && ssResult.homepage) {
+      const l3 = await tryUniversityDirectory(name, university, ssResult.homepage);
+      if (l3) return l3;
+    }
+  }
+
+  // Layer 2: Google Scholar
+  const l2 = await tryGoogleScholar(name, university);
+  if (typeof l2 === 'string') return l2;
+  const homepage = l2?.homepage || null;
+
+  // Layer 3: University faculty directory
+  const l3 = await tryUniversityDirectory(name, university, homepage);
+  if (l3) return l3;
+
+  // Layer 4: General web search
+  const l4 = await tryGeneralWebSearch(name, university);
+  if (l4) return l4;
+
+  console.log(`[ProfEmail] All 4 layers failed for ${name} — no email found`);
+  return null;
+}
+
+// ── Search Semantic Scholar for professors ────────────────────────────────────
 async function searchProfessors(keywords, targetCountry, limit = 80) {
   const query = keywords.join(' ');
   console.log(`[ProfSearch] Searching: "${query}" | Country: ${targetCountry}`);
-
   try {
     const res = await axios.get(`${SEMANTIC_SCHOLAR_BASE}/author/search`, {
       params: {
@@ -20,11 +243,10 @@ async function searchProfessors(keywords, targetCountry, limit = 80) {
         limit: Math.min(limit, 100),
         fields: 'authorId,name,affiliations,paperCount,citationCount,hIndex,papers'
       },
-      headers: { 'User-Agent': 'ScholarBroad/1.0 (scholarship-matching-platform)' }
+      headers: { 'User-Agent': 'ScholarBroad/1.0' }
     });
-
     const authors = res.data?.data || [];
-    console.log(`[ProfSearch] Found ${authors.length} authors on Semantic Scholar`);
+    console.log(`[ProfSearch] Found ${authors.length} authors`);
     return authors;
   } catch (err) {
     console.error('[ProfSearch] Semantic Scholar error:', err.message);
@@ -35,13 +257,9 @@ async function searchProfessors(keywords, targetCountry, limit = 80) {
 // ── Get recent papers for a professor ────────────────────────────────────────
 async function getRecentPapers(authorId, limit = 3) {
   try {
-    await sleep(REQUEST_DELAY_MS);
+    await sleep(2000);
     const res = await axios.get(`${SEMANTIC_SCHOLAR_BASE}/author/${authorId}/papers`, {
-      params: {
-        limit,
-        fields: 'title,abstract,year,venue,externalIds',
-        sort: 'year:desc'
-      },
+      params: { limit, fields: 'title,abstract,year,venue,externalIds', sort: 'year:desc' },
       headers: { 'User-Agent': 'ScholarBroad/1.0' }
     });
     return (res.data?.data || []).filter(p => p.year >= new Date().getFullYear() - 3);
@@ -51,82 +269,38 @@ async function getRecentPapers(authorId, limit = 3) {
   }
 }
 
-// ── Try to find professor email from university faculty page ──────────────────
-async function findProfessorEmail(name, university) {
-  const searchQuery = encodeURIComponent(`"${name}" "${university}" email professor`);
-  const url = `https://www.google.com/search?q=${searchQuery}`;
-
-  try {
-    await sleep(REQUEST_DELAY_MS);
-    const res = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html'
-      },
-      timeout: 8000
-    });
-
-    const $ = cheerio.load(res.data);
-    const text = $('body').text();
-
-    // Extract email patterns from page text
-    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(edu|ac\.[a-z]{2}|uni-[a-z]+\.de|[a-z]{2,4})/g;
-    const emails = text.match(emailRegex) || [];
-
-    // Filter out generic/noreply emails, keep .edu and .ac.xx
-    const academic = emails.filter(e =>
-      (e.includes('.edu') || e.includes('.ac.') || e.includes('uni-')) &&
-      !e.includes('example') && !e.includes('noreply') && !e.includes('no-reply')
-    );
-
-    return academic[0] || null;
-  } catch {
-    return null;
-  }
-}
-
-// ── Score professor fit (1-10) based on research alignment ───────────────────
+// ── Score professor fit ───────────────────────────────────────────────────────
 function scoreFit(professor, userKeywords) {
   let score = 0;
   const paperText = (professor.recentPapers || [])
-    .map(p => `${p.title} ${p.abstract || ''}`)
-    .join(' ').toLowerCase();
+    .map(p => `${p.title} ${p.abstract || ''}`).join(' ').toLowerCase();
 
-  // Keyword matches in recent papers
   for (const kw of userKeywords) {
     if (paperText.includes(kw.toLowerCase())) score += 2;
   }
-
-  // Academic standing
   if (professor.hIndex >= 20) score += 2;
   else if (professor.hIndex >= 10) score += 1;
 
-  // Recent activity (has papers in last 2 years)
-  const recentCount = (professor.recentPapers || []).filter(
-    p => p.year >= new Date().getFullYear() - 2
-  ).length;
+  const recentCount = (professor.recentPapers || [])
+    .filter(p => p.year >= new Date().getFullYear() - 2).length;
   if (recentCount >= 2) score += 2;
   else if (recentCount === 1) score += 1;
 
-  // Has email (contactable)
   if (professor.email) score += 1;
-
   return Math.min(10, score);
 }
 
-// ── Extract university name from affiliations ─────────────────────────────────
 function extractUniversity(affiliations = []) {
   if (!affiliations.length) return 'Unknown University';
   const aff = affiliations[0];
   return aff.name || aff || 'Unknown University';
 }
 
-// ── Main: run full professor discovery for a user ─────────────────────────────
+// ── Main: discover professors for a user ─────────────────────────────────────
 async function discoverProfessors(userId, keywords, targetCountry) {
   const db = getDb();
   const col = db.collection('professor_targets');
 
-  // Clear previous targets for this user (re-run = fresh search)
   await col.deleteMany({ userId, status: 'pending' });
 
   const rawAuthors = await searchProfessors(keywords, targetCountry, 100);
@@ -137,26 +311,21 @@ async function discoverProfessors(userId, keywords, targetCountry) {
   for (const author of rawAuthors.slice(0, 80)) {
     try {
       const university = extractUniversity(author.affiliations);
-
-      // Skip if no affiliation info
       if (university === 'Unknown University') continue;
 
-      // Fetch recent papers
       const recentPapers = await getRecentPapers(author.authorId);
-
-      // Skip professors with no recent work
       if (recentPapers.length === 0) continue;
 
-      // Try to find email
-      const email = await findProfessorEmail(author.name, university);
+      // Use full 4-layer email resolution
+      const email = await findProfessorEmail(author.name, university, author.authorId);
 
-      // Build professor object
       const professor = {
         userId,
         authorId: author.authorId,
         name: author.name,
         university,
         email: email || null,
+        emailResolutionAttempted: true,
         hIndex: author.hIndex || 0,
         paperCount: author.paperCount || 0,
         recentPapers: recentPapers.map(p => ({
@@ -166,9 +335,10 @@ async function discoverProfessors(userId, keywords, targetCountry) {
           venue: p.venue
         })),
         fitScore: scoreFit({ ...author, recentPapers, email }, keywords),
-        status: 'pending',        // pending → email_generated → approved → sent → replied
+        status: 'pending',
         emailGenerated: false,
         emailApproved: false,
+        autoMode: false,
         emailSentAt: null,
         followUp1SentAt: null,
         followUp2SentAt: null,
@@ -177,23 +347,20 @@ async function discoverProfessors(userId, keywords, targetCountry) {
         createdAt: new Date()
       };
 
-      // Only save if fit score >= 3
       if (professor.fitScore < 3) continue;
 
       await col.insertOne(professor);
       saved++;
-
-      console.log(`[ProfSearch] ✓ ${author.name} @ ${university} | Score: ${professor.fitScore}/10`);
+      console.log(`[ProfSearch] ✓ ${author.name} @ ${university} | Score: ${professor.fitScore}/10 | Email: ${email ? '✓' : '✗'}`);
       await sleep(500);
 
     } catch (err) {
-      console.error(`[ProfSearch] Error processing ${author.name}:`, err.message);
+      console.error(`[ProfSearch] Error for ${author.name}:`, err.message);
     }
   }
 
-  console.log(`[ProfSearch] Done. Saved ${saved} qualified professors for user ${userId}`);
+  console.log(`[ProfSearch] Done. ${saved} professors saved for user ${userId}`);
 
-  // Update user profile with discovery status
   await db.collection('user_profiles').updateOne(
     { userId },
     { $set: { professorDiscoveryStatus: 'done', professorsFound: saved, discoveredAt: new Date() } }
@@ -202,34 +369,22 @@ async function discoverProfessors(userId, keywords, targetCountry) {
   return { discovered: rawAuthors.length, qualified: saved };
 }
 
-// ── Get professors for a user (for dashboard display) ────────────────────────
 async function getProfessorsForUser(userId, options = {}) {
   const db = getDb();
   const { status, page = 1, limit = 20 } = options;
   const query = { userId };
   if (status) query.status = status;
-
   const professors = await db.collection('professor_targets')
-    .find(query)
-    .sort({ fitScore: -1, createdAt: 1 })
-    .skip((page - 1) * limit)
-    .limit(limit)
-    .toArray();
-
+    .find(query).sort({ fitScore: -1, createdAt: 1 })
+    .skip((page - 1) * limit).limit(limit).toArray();
   const total = await db.collection('professor_targets').countDocuments(query);
   return { professors, total, pages: Math.ceil(total / limit) };
 }
 
-// ── Get a single professor by ID ──────────────────────────────────────────────
 async function getProfessorById(profId) {
   const db = getDb();
   const { ObjectId } = require('mongodb');
   return db.collection('professor_targets').findOne({ _id: new ObjectId(profId) });
 }
 
-module.exports = {
-  discoverProfessors,
-  getProfessorsForUser,
-  getProfessorById,
-  scoreFit
-};
+module.exports = { discoverProfessors, getProfessorsForUser, getProfessorById, scoreFit, findProfessorEmail };
