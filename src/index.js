@@ -6,7 +6,7 @@ const multer = require('multer');
 const mongoService = require('./services/mongoService');
 const getDb = () => mongoService.db;
 const { fetchAllDueGroups, addGroup, toggleGroup, removeGroup, listGroups, seedDefaultGroups } = require('./services/whatsappSourceService');
-const { processUnprocessedPosts, getNextUnpublished, markPublished, trackClick, getBySlug, bufferCount, sendToGroupWithFallback } = require('./services/groqRewriteService');
+const { processUnprocessedPosts, getNextUnpublished, markPublished, purgeExpiredScholarships, hasUrgentScholarships, fixGroupLinkInDB, trackClick, getBySlug, bufferCount, sendToGroupWithFallback } = require('./services/groqRewriteService');
 const { register, login, requireAuth, requirePlan, verifyAndUpgrade, getUserById } = require('./services/authService');
 const { discoverProfessors, getProfessorsForUser } = require('./services/professorSearchService');
 const { generateEmailsForUser, getEmailQueue, approveEmail, editEmail, skipEmail, generateResearchProposal, generatePersonalStatement, extractKeywords } = require('./services/emailGenerationService');
@@ -15,6 +15,9 @@ const { getAuthUrl, handleCallback, disconnectGmail } = require('./services/gmai
 
 // ── RSS fallback (only used when WAHA groups return 0 new posts) ──────────────
 const { runRssFallback } = require('./services/scraperFallbackService');
+
+// ── CV Service ────────────────────────────────────────────────────────────────
+const { processUploadedCV, regenerateDocument } = require('./services/cvService');
 
 // ── App setup ─────────────────────────────────────────────────────────────────
 const app = express();
@@ -486,16 +489,60 @@ app.post('/api/cron/fetch-groups', adminAuth, async (req, res) => {
 });
 
 // ── Daily post to WhatsApp broadcast group (WAHA + Whapi fallback) ────────────
+// Smart posting: deadline-priority order, purges expired, forces urgent posts
 app.post('/api/cron/daily-post', adminAuth, async (req, res) => {
   try {
     const next = await getNextUnpublished();
-    if (!next) return res.json({ ok: true, message: 'Buffer empty' });
-    const sendResult = await sendToGroupWithFallback(next.whatsappText);
+    if (!next) return res.json({ ok: true, message: 'Buffer empty — no scholarships to post' });
+
+    // Add urgency label to message if deadline is very close
+    let textToSend = next.whatsappText;
+    if (next.daysLeft !== undefined && next.daysLeft <= 2) {
+      textToSend = '🚨 *DEADLINE ALERT — CLOSING SOON!*
+
+' + textToSend;
+    }
+
+    const sendResult = await sendToGroupWithFallback(textToSend);
     await markPublished(next.slug);
-    res.json({ ok: true, posted: next.title, method: sendResult.method });
+    res.json({
+      ok: true,
+      posted: next.title,
+      deadline: next.deadline || 'Unknown',
+      daysLeft: next.daysLeft !== undefined ? Math.round(next.daysLeft) : null,
+      method: sendResult.method
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Force-post urgent scholarships (called by Cloudflare Worker extra trigger) ─
+app.post('/api/cron/urgent-post', adminAuth, async (req, res) => {
+  try {
+    const urgent = await hasUrgentScholarships();
+    if (!urgent) return res.json({ ok: true, message: 'No urgent scholarships' });
+
+    const next = await getNextUnpublished();
+    if (!next) return res.json({ ok: true, message: 'Buffer empty' });
+
+    const textToSend = '🚨 *DEADLINE ALERT — CLOSING IN 48 HOURS!*
+
+' + next.whatsappText;
+    const sendResult = await sendToGroupWithFallback(textToSend);
+    await markPublished(next.slug);
+    res.json({ ok: true, posted: next.title, urgent: true, method: sendResult.method });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Purge expired scholarships manually ───────────────────────────────────────
+app.post('/api/admin/purge-expired', adminAuth, async (req, res) => {
+  try {
+    const purged = await purgeExpiredScholarships();
+    res.json({ ok: true, purged, message: `Removed ${purged} expired scholarships` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/cron/process-posts', adminAuth, async (req, res) => {
@@ -573,6 +620,14 @@ app.post('/api/admin/post-now/:slug', adminAuth, async (req, res) => {
   res.json({ ok: true, posted: scholarship.title, method: sendResult.method });
 });
 
+// ── Admin: fix YOUR_GROUP_INVITE in all existing DB records ──────────────────
+app.post('/api/admin/fix-group-link', adminAuth, async (req, res) => {
+  try {
+    const fixed = await fixGroupLinkInDB();
+    res.json({ ok: true, fixed, message: `Fixed group link in ${fixed} scholarship records` });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Admin: manually trigger Masters pipeline for a user (for testing) ───────
 app.post('/api/admin/trigger-masters/:userId', adminAuth, async (req, res) => {
   try {
@@ -588,6 +643,41 @@ app.post('/api/admin/trigger-masters/:userId', adminAuth, async (req, res) => {
       degree: (profile && profile.degree) || req.body.degree || 'Masters'
     });
     res.json({ ok: true, message: 'Masters pipeline triggered for ' + user.name });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Documents: get all generated documents ───────────────────────────────────
+app.get('/api/user/documents', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+  try {
+    const db = getDb();
+    const profile = await db.collection('user_profiles').findOne({ userId: req.user.userId });
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    res.json({
+      ok: true,
+      documents: {
+        academicCV:        profile.academicCV        || null,
+        coverLetter:       profile.coverLetter       || null,
+        refLetterRequest:  profile.refLetterRequest  || null,
+        studyPlan:         profile.studyPlan         || null,
+        personalStatement: profile.personalStatement || null
+      },
+      parsedCV:    profile.parsedCV    || null,
+      generatedAt: profile.documentsGeneratedAt || null
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/user/documents/:docType/regenerate', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+  try {
+    const result = await regenerateDocument(req.user.userId, req.params.docType, req.body);
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/user/documents/reprocess', requireAuth, requirePlan('scholar','pro','agency'), async (req, res) => {
+  try {
+    processUploadedCV(req.user.userId).catch(console.error);
+    res.json({ ok: true, message: 'Reprocessing CV — documents ready in ~2 minutes' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
