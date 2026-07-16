@@ -230,13 +230,100 @@ async function processUnprocessedPosts() {
   return { processed: unprocessed.length, succeeded: successCount };
 }
 
-// ── Get next unpublished scholarship for daily broadcast ──────────────────────
+// ── Parse deadline string into Date ──────────────────────────────────────────
+function parseDeadline(deadlineStr = '') {
+  if (!deadlineStr || deadlineStr === 'Unknown' || deadlineStr === 'Rolling' ||
+      deadlineStr === 'Check website' || deadlineStr === 'Varies') return null;
+  try {
+    const d = new Date(deadlineStr);
+    return isNaN(d.getTime()) ? null : d;
+  } catch { return null; }
+}
+
+// ── Purge expired scholarships from DB ────────────────────────────────────────
+// Removes any unpublished scholarship whose deadline has passed
+async function purgeExpiredScholarships() {
+  const db = getDb();
+  const col = db.collection('scholarships');
+  const now = new Date();
+  const all = await col.find({ published: false }).toArray();
+
+  let purged = 0;
+  for (const s of all) {
+    const deadline = parseDeadline(s.deadline);
+    if (deadline && deadline < now) {
+      await col.deleteOne({ _id: s._id });
+      purged++;
+      console.log(`[Purge] Removed expired: "${s.title}" (deadline: ${s.deadline})`);
+    }
+  }
+  if (purged > 0) console.log(`[Purge] Removed ${purged} expired scholarships`);
+  return purged;
+}
+
+// ── Get next unpublished scholarship — deadline priority ──────────────────────
+// Priority order:
+// 1. URGENT: deadline within 2 days → post immediately regardless of daily limit
+// 2. SOON: deadline within 14 days → post next
+// 3. NO DEADLINE / UNKNOWN → post after deadline-aware ones
+// 4. Never post expired scholarships
 async function getNextUnpublished() {
   const db = getDb();
-  return db.collection('scholarships').findOne(
-    { published: false },
-    { sort: { createdAt: 1 } }
-  );
+  const col = db.collection('scholarships');
+  const now = new Date();
+
+  // First purge expired ones silently
+  await purgeExpiredScholarships();
+
+  const unpublished = await col.find({ published: false }).toArray();
+  if (!unpublished.length) return null;
+
+  // Categorise by deadline urgency
+  const urgent = [];   // deadline <= 2 days
+  const soon = [];     // deadline <= 14 days
+  const normal = [];   // no deadline or far away
+
+  for (const s of unpublished) {
+    const deadline = parseDeadline(s.deadline);
+    if (!deadline) {
+      normal.push(s);
+      continue;
+    }
+    const daysLeft = (deadline - now) / (1000 * 60 * 60 * 24);
+    if (daysLeft <= 2) urgent.push({ ...s, daysLeft });
+    else if (daysLeft <= 14) soon.push({ ...s, daysLeft });
+    else normal.push({ ...s, daysLeft });
+  }
+
+  // Sort each category: soonest deadline first
+  const sortByDeadline = (a, b) => (a.daysLeft || 999) - (b.daysLeft || 999);
+  urgent.sort(sortByDeadline);
+  soon.sort(sortByDeadline);
+  normal.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+  // Return highest priority
+  const next = urgent[0] || soon[0] || normal[0];
+  if (next) {
+    const label = urgent[0] ? '🚨 URGENT' : soon[0] ? '⏰ SOON' : '📅 NORMAL';
+    console.log(`[PostQueue] Next: "${next.title}" | ${label} | Deadline: ${next.deadline || 'Unknown'}`);
+  }
+  return next || null;
+}
+
+// ── Check if urgent scholarships need extra posts today ───────────────────────
+// Returns true if there are urgent scholarships that must be posted NOW
+// regardless of whether we already posted today
+async function hasUrgentScholarships() {
+  const db = getDb();
+  const now = new Date();
+  const twoDaysFromNow = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
+  const unpublished = await db.collection('scholarships').find({ published: false }).toArray();
+
+  for (const s of unpublished) {
+    const deadline = parseDeadline(s.deadline);
+    if (deadline && deadline > now && deadline <= twoDaysFromNow) return true;
+  }
+  return false;
 }
 
 // ── Mark scholarship as published ─────────────────────────────────────────────
@@ -246,6 +333,24 @@ async function markPublished(slug) {
     { slug },
     { $set: { published: true, publishedAt: new Date() } }
   );
+}
+
+// ── One-time fix: replace YOUR_GROUP_INVITE in all existing records ───────────
+async function fixGroupLinkInDB() {
+  const db = getDb();
+  const col = db.collection('scholarships');
+  const result = await col.updateMany(
+    { whatsappText: { $regex: 'YOUR_GROUP_INVITE' } },
+    [{ $set: { whatsappText: {
+      $replaceAll: {
+        input: '$whatsappText',
+        find: 'YOUR_GROUP_INVITE',
+        replacement: 'CwtL9JqEFQOASutGpeYPlZ'
+      }
+    }}}]
+  );
+  console.log(`[FixGroupLink] Updated ${result.modifiedCount} records`);
+  return result.modifiedCount;
 }
 
 // ── Track redirect/affiliate clicks ───────────────────────────────────────────
@@ -273,6 +378,9 @@ module.exports = {
   processUnprocessedPosts,
   getNextUnpublished,
   markPublished,
+  purgeExpiredScholarships,
+  hasUrgentScholarships,
+  fixGroupLinkInDB,
   trackClick,
   getBySlug,
   bufferCount,
