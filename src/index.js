@@ -498,9 +498,7 @@ app.post('/api/cron/daily-post', adminAuth, async (req, res) => {
     // Add urgency label to message if deadline is very close
     let textToSend = next.whatsappText;
     if (next.daysLeft !== undefined && next.daysLeft <= 2) {
-      textToSend = '🚨 *DEADLINE ALERT — CLOSING SOON!*
-
-' + textToSend;
+      textToSend = '\uD83D\uDEA8 *DEADLINE ALERT \u2014 CLOSING SOON!*\n\n' + textToSend;
     }
 
     const sendResult = await sendToGroupWithFallback(textToSend);
@@ -526,9 +524,7 @@ app.post('/api/cron/urgent-post', adminAuth, async (req, res) => {
     const next = await getNextUnpublished();
     if (!next) return res.json({ ok: true, message: 'Buffer empty' });
 
-    const textToSend = '🚨 *DEADLINE ALERT — CLOSING IN 48 HOURS!*
-
-' + next.whatsappText;
+    const textToSend = '\uD83D\uDEA8 *DEADLINE ALERT \u2014 CLOSING IN 48 HOURS!*\n\n' + next.whatsappText;
     const sendResult = await sendToGroupWithFallback(textToSend);
     await markPublished(next.slug);
     res.json({ ok: true, posted: next.title, urgent: true, method: sendResult.method });
