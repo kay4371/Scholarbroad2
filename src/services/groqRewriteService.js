@@ -27,10 +27,34 @@ const BROADCAST_GROUP = process.env.BROADCAST_GROUP_ID;
 
 /**
  * Send text to WhatsApp broadcast group.
- * Tries WAHA first. If WAHA fails, falls back to Whapi silently.
+ * PRIMARY: Whapi (WAHA Railway instance currently down)
+ * FALLBACK: WAHA (when restored)
  */
 async function sendToGroupWithFallback(text) {
-  // ── Primary: WAHA ──────────────────────────────────────────────────────────
+  if (!BROADCAST_GROUP) throw new Error('BROADCAST_GROUP_ID not set');
+
+  // ── Primary: Whapi ─────────────────────────────────────────────────────────
+  if (WHAPI_TOKEN) {
+    try {
+      await axios.post(
+        `${WHAPI_BASE}/messages/text`,
+        { to: BROADCAST_GROUP, body: text },
+        {
+          headers: {
+            'Authorization': `Bearer ${WHAPI_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 15000
+        }
+      );
+      console.log('[Sender] ✓ Sent via Whapi');
+      return { method: 'whapi' };
+    } catch (whapiErr) {
+      console.warn('[Sender] Whapi failed:', whapiErr.message, '— trying WAHA fallback...');
+    }
+  }
+
+  // ── Fallback: WAHA ─────────────────────────────────────────────────────────
   try {
     await axios.post(
       `${WAHA_BASE}/api/sendText`,
@@ -46,30 +70,8 @@ async function sendToGroupWithFallback(text) {
     console.log('[Sender] ✓ Sent via WAHA');
     return { method: 'waha' };
   } catch (wahaErr) {
-    console.warn('[Sender] WAHA failed:', wahaErr.message, '— trying Whapi fallback...');
+    throw new Error('Both Whapi and WAHA failed: ' + wahaErr.message);
   }
-
-  // ── Fallback: Whapi ────────────────────────────────────────────────────────
-  if (!WHAPI_TOKEN) {
-    throw new Error('WAHA failed and WHAPI_TOKEN3 is not set — cannot send message');
-  }
-  if (!BROADCAST_GROUP) {
-    throw new Error('BROADCAST_GROUP_ID not set');
-  }
-
-  await axios.post(
-    `${WHAPI_BASE}/messages/text`,
-    { to: BROADCAST_GROUP, body: text },
-    {
-      headers: {
-        'Authorization': `Bearer ${WHAPI_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: 15000
-    }
-  );
-  console.log('[Sender] ✓ Sent via Whapi (fallback)');
-  return { method: 'whapi' };
 }
 
 // ── Slug helpers ──────────────────────────────────────────────────────────────
