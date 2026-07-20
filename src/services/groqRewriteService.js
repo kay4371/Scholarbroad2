@@ -23,55 +23,92 @@ const WAHA_KEY       = process.env.WAHA_API_KEY     || '';
 const WAHA_SESSION   = process.env.WAHA_SESSION     || 'default';
 const WHAPI_TOKEN    = process.env.WHAPI_TOKEN3     || '';
 const WHAPI_BASE     = 'https://gate.whapi.cloud';
-const BROADCAST_GROUP = process.env.BROADCAST_GROUP_ID;
+const BROADCAST_GROUP   = process.env.BROADCAST_GROUP_ID;
+const BROADCAST_CHANNEL = process.env.BROADCAST_CHANNEL_ID || '120363426245528639@newsletter';
+// BROADCAST_MODE: 'group' | 'channel' | 'both'
+const BROADCAST_MODE    = process.env.BROADCAST_MODE || 'both';
 
 /**
- * Send text to WhatsApp broadcast group.
- * PRIMARY: Whapi (WAHA Railway instance currently down)
- * FALLBACK: WAHA (when restored)
+ * Send via Whapi to a specific target (group or channel).
+ * Primary: Whapi. Fallback: WAHA.
+ */
+async function sendViaWhapi(targetId, text) {
+  await axios.post(
+    `${WHAPI_BASE}/messages/text`,
+    { to: targetId, body: text },
+    {
+      headers: {
+        'Authorization': `Bearer ${WHAPI_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 15000
+    }
+  );
+}
+
+async function sendViaWAHA(targetId, text) {
+  await axios.post(
+    `${WAHA_BASE}/api/sendText`,
+    { chatId: targetId, text, session: WAHA_SESSION },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(WAHA_KEY ? { 'X-Api-Key': WAHA_KEY } : {})
+      },
+      timeout: 15000
+    }
+  );
+}
+
+/**
+ * Send text to WhatsApp broadcast targets.
+ * BROADCAST_MODE controls where posts go:
+ *   'group'   → WhatsApp group only
+ *   'channel' → WhatsApp channel only
+ *   'both'    → group AND channel (default)
+ *
+ * Primary sender: Whapi. Fallback: WAHA.
  */
 async function sendToGroupWithFallback(text) {
-  if (!BROADCAST_GROUP) throw new Error('BROADCAST_GROUP_ID not set');
+  const results = [];
+  const targets = [];
 
-  // ── Primary: Whapi ─────────────────────────────────────────────────────────
-  if (WHAPI_TOKEN) {
+  if (BROADCAST_MODE === 'group' || BROADCAST_MODE === 'both') {
+    if (BROADCAST_GROUP) targets.push({ id: BROADCAST_GROUP, label: 'group' });
+  }
+  if (BROADCAST_MODE === 'channel' || BROADCAST_MODE === 'both') {
+    if (BROADCAST_CHANNEL) targets.push({ id: BROADCAST_CHANNEL, label: 'channel' });
+  }
+
+  if (targets.length === 0) throw new Error('No broadcast targets configured');
+
+  for (const target of targets) {
+    // Try Whapi first
+    if (WHAPI_TOKEN) {
+      try {
+        await sendViaWhapi(target.id, text);
+        console.log(`[Sender] ✓ Sent to ${target.label} via Whapi`);
+        results.push({ target: target.label, method: 'whapi', ok: true });
+        continue;
+      } catch (whapiErr) {
+        console.warn(`[Sender] Whapi failed for ${target.label}:`, whapiErr.message);
+      }
+    }
+
+    // Fallback: WAHA
     try {
-      await axios.post(
-        `${WHAPI_BASE}/messages/text`,
-        { to: BROADCAST_GROUP, body: text },
-        {
-          headers: {
-            'Authorization': `Bearer ${WHAPI_TOKEN}`,
-            'Content-Type': 'application/json'
-          },
-          timeout: 15000
-        }
-      );
-      console.log('[Sender] ✓ Sent via Whapi');
-      return { method: 'whapi' };
-    } catch (whapiErr) {
-      console.warn('[Sender] Whapi failed:', whapiErr.message, '— trying WAHA fallback...');
+      await sendViaWAHA(target.id, text);
+      console.log(`[Sender] ✓ Sent to ${target.label} via WAHA`);
+      results.push({ target: target.label, method: 'waha', ok: true });
+    } catch (wahaErr) {
+      console.error(`[Sender] Both failed for ${target.label}:`, wahaErr.message);
+      results.push({ target: target.label, method: 'failed', ok: false, error: wahaErr.message });
     }
   }
 
-  // ── Fallback: WAHA ─────────────────────────────────────────────────────────
-  try {
-    await axios.post(
-      `${WAHA_BASE}/api/sendText`,
-      { chatId: BROADCAST_GROUP, text, session: WAHA_SESSION },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(WAHA_KEY ? { 'X-Api-Key': WAHA_KEY } : {})
-        },
-        timeout: 15000
-      }
-    );
-    console.log('[Sender] ✓ Sent via WAHA');
-    return { method: 'waha' };
-  } catch (wahaErr) {
-    throw new Error('Both Whapi and WAHA failed: ' + wahaErr.message);
-  }
+  const anySuccess = results.some(r => r.ok);
+  if (!anySuccess) throw new Error('All broadcast targets failed');
+  return { results, mode: BROADCAST_MODE };
 }
 
 // ── Slug helpers ──────────────────────────────────────────────────────────────
