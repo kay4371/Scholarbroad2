@@ -616,6 +616,16 @@ app.post('/api/admin/post-now/:slug', adminAuth, async (req, res) => {
   res.json({ ok: true, posted: scholarship.title, method: sendResult.method });
 });
 
+// ── Admin: get/set broadcast mode (group | channel | both) ──────────────────
+app.get('/api/admin/broadcast-mode', adminAuth, (req, res) => {
+  res.json({
+    mode: process.env.BROADCAST_MODE || 'both',
+    group: process.env.BROADCAST_GROUP_ID || null,
+    channel: process.env.BROADCAST_CHANNEL_ID || '120363426245528639@newsletter',
+    note: 'To change mode update BROADCAST_MODE env var on Render: group | channel | both'
+  });
+});
+
 // ── Admin: fix YOUR_GROUP_INVITE in all existing DB records ──────────────────
 app.post('/api/admin/fix-group-link', adminAuth, async (req, res) => {
   try {
