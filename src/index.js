@@ -626,6 +626,35 @@ app.get('/api/admin/broadcast-mode', adminAuth, (req, res) => {
   });
 });
 
+
+
+// ── Admin: reset raw posts for URL reprocessing (run once) ───────────────────
+app.post('/api/admin/reset-for-reprocess', adminAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const scholarshipsNeedingUrl = await db.collection('scholarships')
+      .find({ officialUrl: null, rawPostId: { $exists: true } })
+      .toArray();
+
+    let reset = 0;
+    for (const s of scholarshipsNeedingUrl) {
+      if (!s.rawPostId) continue;
+      const result = await db.collection('raw_whatsapp_posts').updateOne(
+        { _id: s.rawPostId },
+        { $set: { processed: false, reprocessForUrl: true } }
+      );
+      if (result.modifiedCount > 0) reset++;
+    }
+
+    res.json({
+      ok: true,
+      reset,
+      message: `Reset ${reset} raw posts. Now call /api/cron/process-posts repeatedly to reprocess.`
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
 // ── Admin: fix YOUR_GROUP_INVITE in all existing DB records ──────────────────
 app.post('/api/admin/fix-group-link', adminAuth, async (req, res) => {
   try {
